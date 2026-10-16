@@ -1,0 +1,269 @@
+openapi: 3.0.3
+info:
+  title: Telemetry Service REST API
+  description: |
+    Синхронный API сервиса Telemetry (Core) для запросов текущих и исторических
+    показаний датчиков, выборок по локации и агрегаций временных рядов.
+
+    Потребители: Web App через API Gateway.
+  version: 1.0.0
+  contact:
+    name: SmartHome Platform
+
+servers:
+  - url: https://api.smarthome.local/telemetry
+    description: Production
+  - url: http://localhost:8083
+    description: Local
+
+tags:
+  - name: Measurements
+    description: Показания датчиков
+  - name: Aggregations
+    description: Агрегации временных рядов
+  - name: Sensors
+    description: Метаданные зарегистрированных датчиков
+
+paths:
+  /v1/sensors/{sensorId}/measurements/current:
+    get:
+      tags: [Measurements]
+      summary: Текущее (последнее) показание датчика
+      operationId: getCurrentMeasurement
+      parameters:
+        - $ref: '#/components/parameters/SensorId'
+      responses:
+        '200':
+          description: Последнее показание
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Measurement'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/sensors/{sensorId}/measurements:
+    get:
+      tags: [Measurements]
+      summary: История показаний датчика
+      operationId: getSensorHistory
+      parameters:
+        - $ref: '#/components/parameters/SensorId'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Список показаний
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/locations/{locationId}/measurements:
+    get:
+      tags: [Measurements]
+      summary: Показания по локации (комнате)
+      operationId: getMeasurementsByLocation
+      description: Возвращает показания всех датчиков, привязанных к локации.
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Список показаний по локации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/sensors/{sensorId}:
+    get:
+      tags: [Sensors]
+      summary: Метаданные зарегистрированного датчика
+      operationId: getSensorMeta
+      parameters:
+        - $ref: '#/components/parameters/SensorId'
+      responses:
+        '200':
+          description: Метаданные датчика
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SensorMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/locations/{locationId}/sensors:
+    get:
+      tags: [Sensors]
+      summary: Список датчиков локации
+      operationId: listSensorsByLocation
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+      responses:
+        '200':
+          description: Метаданные датчиков
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SensorMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    SensorId:
+      name: sensorId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Идентификатор модуля-датчика (Module.id, kind=SENSOR)
+    LocationId:
+      name: locationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Идентификатор локации (комнаты)
+    From:
+      name: from
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date-time
+    To:
+      name: to
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date-time
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 100
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    AggregationFunction:
+      type: string
+      enum: [AVG, MIN, MAX, SUM, COUNT]
+
+    Measurement:
+      type: object
+      required: [id, sensorId, value, unit, timestamp]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sensorId:
+          type: string
+          format: uuid
+        value:
+          type: number
+          format: float
+        unit:
+          type: string
+          example: CELSIUS
+        timestamp:
+          type: string
+          format: date-time
+          description: recorded_at on device
+        ingestedAt:
+          type: string
+          format: date-time
+
+    MeasurementList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Measurement'
+        total:
+          type: integer
+          minimum: 0
+
+    SensorMeta:
+      type: object
+      required: [sensorId, deviceId, kind, unit, registeredAt]
+      properties:
+        sensorId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          example: TEMPERATURE
+        unit:
+          type: string
+          example: CELSIUS
+        locationId:
+          type: string
+          format: uuid
+          nullable: true
+        registeredAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

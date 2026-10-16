@@ -1,0 +1,187 @@
+asyncapi: 2.6.0
+info:
+  title: Device Control Event API
+  version: 1.0.0
+  description: |
+    Асинхронный API сервиса Device Control (Core).
+
+    - Публикует команды в Command Queue для Home Hub Service.
+    - Читает результаты исполнения из Command Response Queue и обновляет
+      журнал команд / состояние устройства (ApplyCommandResult).
+
+defaultContentType: application/json
+
+servers:
+  kafka:
+    url: kafka://kafka.smarthome.local:9092
+    protocol: kafka
+    description: Apache Kafka (Command Queue / Command Response Queue)
+
+channels:
+  smart-home.device-control.commands:
+    description: Очередь команд для Home Hub (Command Queue)
+    publish:
+      operationId: publishCommand
+      summary: Публикация команды устройству
+      description: |
+        Device Control публикует команду после валидации и записи в журнал.
+        Home Hub читает сообщения и исполняет их на устройствах (MQTT).
+      message:
+        $ref: '#/components/messages/DeviceCommand'
+    subscribe:
+      operationId: consumeCommand
+      summary: Чтение команд Home Hub
+      description: Контракт для Home Hub Service (потребитель).
+      message:
+        $ref: '#/components/messages/DeviceCommand'
+
+  smart-home.device-control.command-results:
+    description: Очередь ответов от Home Hub (Command Response Queue)
+    publish:
+      operationId: publishCommandResult
+      summary: Публикация результата исполнения
+      description: Home Hub публикует APPLIED / FAILED после исполнения команды.
+      message:
+        $ref: '#/components/messages/CommandResult'
+    subscribe:
+      operationId: consumeCommandResult
+      summary: Обработка результата исполнения
+      description: |
+        Device Control обновляет статус команды и DeviceState
+        (ApplyCommandResult).
+      message:
+        $ref: '#/components/messages/CommandResult'
+
+components:
+  messages:
+    DeviceCommand:
+      name: DeviceCommand
+      title: Команда устройству
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlationId:
+            type: string
+            format: uuid
+          messageId:
+            type: string
+            format: uuid
+          contentType:
+            type: string
+            default: application/json
+      payload:
+        $ref: '#/components/schemas/DeviceCommandPayload'
+      examples:
+        - name: setTargetTemperature
+          summary: Установка целевой температуры
+          payload:
+            commandId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            homeId: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+            type: SET_TARGET_TEMPERATURE
+            params:
+              targetTemperature: 22.5
+              unit: CELSIUS
+            issuedAt: "2026-10-17T12:00:00Z"
+            issuedBy: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+
+    CommandResult:
+      name: CommandResult
+      title: Результат исполнения команды
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlationId:
+            type: string
+            format: uuid
+            description: Должен совпадать с commandId исходной команды
+          messageId:
+            type: string
+            format: uuid
+      payload:
+        $ref: '#/components/schemas/CommandResultPayload'
+      examples:
+        - name: applied
+          summary: Команда успешно применена
+          payload:
+            commandId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            success: true
+            status: APPLIED
+            appliedAttributes:
+              powered: true
+              targetTemperature: 22.5
+            completedAt: "2026-10-17T12:00:05Z"
+        - name: failed
+          summary: Ошибка исполнения
+          payload:
+            commandId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            success: false
+            status: FAILED
+            reason: "Device offline"
+            completedAt: "2026-10-17T12:00:30Z"
+
+  schemas:
+    CommandType:
+      type: string
+      enum:
+        - POWER_ON
+        - POWER_OFF
+        - SET_TARGET_TEMPERATURE
+        - SET_ATTRIBUTE
+
+    DeviceCommandPayload:
+      type: object
+      required: [commandId, deviceId, type, params, issuedAt]
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        homeId:
+          type: string
+          format: uuid
+          description: Идентификатор дома для маршрутизации на Home Hub
+        type:
+          $ref: '#/components/schemas/CommandType'
+        params:
+          type: object
+          additionalProperties: true
+        issuedAt:
+          type: string
+          format: date-time
+        issuedBy:
+          type: string
+          format: uuid
+          description: userId инициатора
+
+    CommandResultPayload:
+      type: object
+      required: [commandId, deviceId, success, status, completedAt]
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        success:
+          type: boolean
+        status:
+          type: string
+          enum: [APPLIED, FAILED]
+        reason:
+          type: string
+          description: Причина отказа (для FAILED)
+        appliedAttributes:
+          type: object
+          additionalProperties: true
+          description: Атрибуты устройства после успешного применения
+        completedAt:
+          type: string
+          format: date-time

@@ -16,15 +16,21 @@ import (
 
 // SensorHandler handles sensor-related requests
 type SensorHandler struct {
-	DB                 *db.DB
-	TemperatureService *services.TemperatureService
+	DB                   *db.DB
+	TemperatureService   *services.TemperatureService
+	DeviceEventPublisher *services.DeviceEventPublisher
 }
 
 // NewSensorHandler creates a new SensorHandler
-func NewSensorHandler(db *db.DB, temperatureService *services.TemperatureService) *SensorHandler {
+func NewSensorHandler(
+	db *db.DB,
+	temperatureService *services.TemperatureService,
+	deviceEventPublisher *services.DeviceEventPublisher,
+) *SensorHandler {
 	return &SensorHandler{
-		DB:                 db,
-		TemperatureService: temperatureService,
+		DB:                   db,
+		TemperatureService:   temperatureService,
+		DeviceEventPublisher: deviceEventPublisher,
 	}
 }
 
@@ -55,7 +61,6 @@ func (h *SensorHandler) GetSensors(c *gin.Context) {
 		if sensor.Type == models.Temperature {
 			tempData, err := h.TemperatureService.GetTemperatureByID(fmt.Sprintf("%d", sensor.ID))
 			if err == nil {
-				// Update sensor with real-time data
 				sensors[i].Value = tempData.Value
 				sensors[i].Status = tempData.Status
 				sensors[i].LastUpdated = tempData.Timestamp
@@ -83,11 +88,9 @@ func (h *SensorHandler) GetSensorByID(c *gin.Context) {
 		return
 	}
 
-	// If this is a temperature sensor, fetch real-time data from the temperature API
 	if sensor.Type == models.Temperature {
 		tempData, err := h.TemperatureService.GetTemperatureByID(fmt.Sprintf("%d", sensor.ID))
 		if err == nil {
-			// Update sensor with real-time data
 			sensor.Value = tempData.Value
 			sensor.Status = tempData.Status
 			sensor.LastUpdated = tempData.Timestamp
@@ -108,7 +111,6 @@ func (h *SensorHandler) GetTemperatureByLocation(c *gin.Context) {
 		return
 	}
 
-	// Fetch temperature data from the external API
 	tempData, err := h.TemperatureService.GetTemperature(location)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -117,7 +119,6 @@ func (h *SensorHandler) GetTemperatureByLocation(c *gin.Context) {
 		return
 	}
 
-	// Return the temperature data
 	c.JSON(http.StatusOK, gin.H{
 		"location":    tempData.Location,
 		"value":       tempData.Value,
@@ -140,6 +141,19 @@ func (h *SensorHandler) CreateSensor(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Async migration: publish device.created for telemetry-service
+	if h.DeviceEventPublisher != nil {
+		deviceID := fmt.Sprintf("sh-%d", sensor.ID)
+		if err := h.DeviceEventPublisher.PublishDeviceCreated(
+			deviceID,
+			sensor.Name,
+			string(sensor.Type),
+			sensor.Location,
+		); err != nil {
+			log.Printf("Warning: failed to publish device.created for sensor %d: %v", sensor.ID, err)
+		}
 	}
 
 	c.JSON(http.StatusCreated, sensor)

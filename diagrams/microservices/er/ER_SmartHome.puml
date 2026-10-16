@@ -1,0 +1,248 @@
+@startuml SmartHome_ER
+title SmartHome — Логическая ER-модель\n(ключевые сущности и связи)
+
+skinparam linetype ortho
+skinparam nodesep 40
+skinparam ranksep 50
+skinparam shadowing false
+skinparam roundcorner 6
+
+hide circle
+skinparam entity {
+  BackgroundColor #F5F5F5
+  BorderColor #424242
+}
+
+' =========================================================
+' Пользователи и пространство (Home Management + User Profile)
+' =========================================================
+
+entity "User\n(Пользователь)" as User {
+  * id : UUID <<PK>>
+  --
+  * email : VARCHAR
+  * full_name : VARCHAR
+  phone : VARCHAR
+  * status : VARCHAR
+  * created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
+
+entity "Home\n(Дом)" as House {
+  * id : UUID <<PK>>
+  --
+  * name : VARCHAR
+  address : VARCHAR
+  timezone : VARCHAR
+  * created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
+
+entity "HomeMembership\n(Участник дома)" as HomeMembership {
+  * id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK>>
+  * house_id : UUID <<FK>>
+  * role : VARCHAR
+  * joined_at : TIMESTAMPTZ
+}
+
+entity "Room\n(Комната)" as Room {
+  * id : UUID <<PK>>
+  --
+  * house_id : UUID <<FK>>
+  * name : VARCHAR
+  floor : INT
+  * created_at : TIMESTAMPTZ
+}
+
+' =========================================================
+' Реестр устройств (Device Management)
+' =========================================================
+
+entity "DeviceType\n(Тип устройства)" as DeviceType {
+  * id : UUID <<PK>>
+  --
+  * name : VARCHAR
+  * category : VARCHAR
+  description : TEXT
+  manufacturer : VARCHAR
+}
+
+entity "Device\n(Устройство)" as Device {
+  * id : UUID <<PK>>
+  --
+  * type_id : UUID <<FK>>
+  * house_id : UUID <<FK>>
+  room_id : UUID <<FK>>
+  * serial_number : VARCHAR
+  * name : VARCHAR
+  * status : VARCHAR
+  protocol : VARCHAR
+  * created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
+
+entity "Module\n(Модуль)" as Module {
+  * id : UUID <<PK>>
+  --
+  * device_id : UUID <<FK>>
+  * kind : VARCHAR
+  * name : VARCHAR
+  * metric : VARCHAR
+  unit : VARCHAR
+  * status : VARCHAR
+  * created_at : TIMESTAMPTZ
+}
+
+' =========================================================
+' Телеметрия (Telemetry Service)
+' =========================================================
+
+entity "TelemetryData\n(Телеметрия)" as TelemetryData {
+  * id : UUID <<PK>>
+  --
+  * module_id : UUID <<FK>>
+  * value : FLOAT
+  * unit : VARCHAR
+  * recorded_at : TIMESTAMPTZ
+  * ingested_at : TIMESTAMPTZ
+}
+
+' =========================================================
+' Управление устройствами (Device Control)
+' =========================================================
+
+entity "DeviceState\n(Состояние устройства)" as DeviceState {
+  * device_id : UUID <<PK,FK>>
+  --
+  * attributes : JSONB
+  last_command_id : UUID <<FK>>
+  * updated_at : TIMESTAMPTZ
+}
+
+entity "Command\n(Команда)" as Command {
+  * id : UUID <<PK>>
+  --
+  * device_id : UUID <<FK>>
+  * user_id : UUID <<FK>>
+  * type : VARCHAR
+  * params : JSONB
+  * status : VARCHAR
+  failure_reason : TEXT
+  * created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
+
+' =========================================================
+' Автоматизация (Automation Service)
+' =========================================================
+
+entity "Scenario\n(Сценарий)" as Scenario {
+  * id : UUID <<PK>>
+  --
+  * house_id : UUID <<FK>>
+  * owner_id : UUID <<FK>>
+  * name : VARCHAR
+  description : TEXT
+  * is_active : BOOLEAN
+  * created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
+
+entity "ScenarioRule\n(Правило сценария)" as ScenarioRule {
+  * id : UUID <<PK>>
+  --
+  * scenario_id : UUID <<FK>>
+  * trigger_type : VARCHAR
+  * trigger_config : JSONB
+  * action_type : VARCHAR
+  * action_config : JSONB
+  * is_active : BOOLEAN
+  * created_at : TIMESTAMPTZ
+}
+
+' =========================================================
+' Коммерция (e-Commerce)
+' =========================================================
+
+entity "Product\n(Товар)" as Product {
+  * id : UUID <<PK>>
+  --
+  * device_type_id : UUID <<FK>>
+  * name : VARCHAR
+  * sku : VARCHAR
+  * price : DECIMAL
+  * currency : VARCHAR
+  * is_available : BOOLEAN
+}
+
+entity "Order\n(Заказ)" as Order {
+  * id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK>>
+  * status : VARCHAR
+  * total_amount : DECIMAL
+  * currency : VARCHAR
+  shipping_address : TEXT
+  * created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
+
+entity "OrderItem\n(Позиция заказа)" as OrderItem {
+  * id : UUID <<PK>>
+  --
+  * order_id : UUID <<FK>>
+  * product_id : UUID <<FK>>
+  * quantity : INT
+  * unit_price : DECIMAL
+}
+
+' =========================================================
+' Связи
+' =========================================================
+
+User ||--o{ HomeMembership : "имеет доступ"
+House ||--o{ HomeMembership : "включает участников"
+
+House ||--o{ Room : "содержит"
+House ||--o{ Device : "содержит"
+House ||--o{ Scenario : "имеет сценарии"
+
+Room ||--o{ Device : "размещает"
+
+DeviceType ||--o{ Device : "классифицирует"
+
+Device ||--o{ Module : "состоит из"
+Device ||--|| DeviceState : "имеет состояние"
+Device ||--o{ Command : "принимает"
+User ||--o{ Command : "инициирует"
+
+Module ||--o{ TelemetryData : "генерирует"
+
+Command |o--o| DeviceState : "last_command"
+
+User ||--o{ Scenario : "владеет"
+Scenario ||--o{ ScenarioRule : "содержит правила"
+
+DeviceType ||--o{ Product : "продаётся как"
+User ||--o{ Order : "оформляет"
+Order ||--o{ OrderItem : "содержит"
+Product ||--o{ OrderItem : "входит в"
+
+note right of Module
+  **Ubiquitous Language**
+  Устройство = набор модулей
+  (датчики и/или реле).
+  Телеметрию генерируют
+  модули kind = SENSOR.
+end note
+
+note left of HomeMembership
+  **Роли**
+  OWNER — владелец дома
+  GUEST — гость с ограниченным
+  доступом к устройствам
+end note
+
+@enduml

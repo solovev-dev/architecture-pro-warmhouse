@@ -1,0 +1,99 @@
+@startuml ContextMap
+
+!theme plain
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 80
+skinparam shadowing false
+skinparam roundcorner 8
+
+' ==== Цвета по типам поддоменов ====
+!define CORE_COLOR #FFE0B2
+!define SUPPORT_COLOR #C8E6C9
+!define GENERIC_COLOR #E1D5E7
+
+skinparam rectangle {
+  BackgroundColor<<core>> CORE_COLOR
+  BorderColor<<core>> #E65100
+  BackgroundColor<<support>> SUPPORT_COLOR
+  BorderColor<<support>> #2E7D32
+  BackgroundColor<<generic>> GENERIC_COLOR
+  BorderColor<<generic>> #6A1B9A
+}
+
+' =========================================================
+' LEGEND
+' =========================================================
+legend right
+  |= Цвет |= Тип поддомена |
+  | <#FFE0B2>   | Core |
+  | <#C8E6C9>   | Supporting |
+  | <#E1D5E7>   | Generic |
+
+  |= Паттерн |= Отношение |
+  | CS  | Customer–Supplier |
+  | ACL | Anticorruption Layer |
+  | OHS | Open Host Service |
+  | PL  | Published Language |
+
+  |= Линия |= Семантика |= Направление |
+  | прямая  | Синхронный вызов (запрос–ответ)  | от вызывающего к вызываемому  |
+  | пунктирная  | Асинхронное событие (pub/sub) | от издателя события к подписчику |
+endlegend
+
+' =========================================================
+' CORE SUBDOMAINS
+' =========================================================
+rectangle "Управление устройствами\n(команды и состояние)" <<core>> as DeviceControl
+rectangle "Телеметрия" <<core>> as Telemetry
+rectangle "Автоматизация и сценарии" <<core>> as Automation
+
+' =========================================================
+' SUPPORTING SUBDOMAINS
+' =========================================================
+rectangle "Подключение и настройка\nустройств" <<support>> as DeviceMgmt
+rectangle "Управление домом\nи пространством" <<support>> as HomeMgmt
+rectangle "Коммерция\n(корзина/заказы)" <<support>> as Commerce
+
+' =========================================================
+' GENERIC SUBDOMAINS
+' =========================================================
+rectangle "Профиль пользователя" <<generic>> as User
+rectangle "Платежи" <<generic>> as Payments
+rectangle "Доставка" <<generic>> as Delivery
+
+' =========================================================
+' CORE <-> CORE
+' =========================================================
+Telemetry ..> Automation : "PL \nSensorValue"
+Automation --> DeviceControl : "CS\n Device API"
+
+
+' =========================================================
+' DEVICE MANAGEMENT
+' =========================================================
+Telemetry <... DeviceMgmt : PL\n SensorRegistered
+
+' =========================================================
+' HOME MANAGEMENT
+' =========================================================
+HomeMgmt --> DeviceControl : "CS\n Device API"
+DeviceMgmt ...> HomeMgmt : "PL\n DeviceRegistered"
+Automation ---> HomeMgmt : "CS\n Home API"
+
+' =========================================================
+' COMMERCE
+' =========================================================
+Commerce --> Payments : "CS/ACL\n Оплата"
+Commerce --> Delivery : "CS/ACL\n Заказ на доставку"
+Commerce ..>  DeviceMgmt : "PL/ACL\n DeviceDelivered"
+
+' =========================================================
+' GENERIC: User
+' =========================================================
+DeviceControl ---> User : "OHS\n User API"
+Automation --> User : "OHS\n User API"
+HomeMgmt --> User : "OHS\n User API"
+Commerce --> User : "OHS\n User API"
+
+@enduml

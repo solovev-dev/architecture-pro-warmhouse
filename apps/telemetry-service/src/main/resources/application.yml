@@ -1,0 +1,25 @@
+server:
+  port: ${PORT:8083}
+
+spring:
+  application:
+    name: telemetry-service
+  datasource:
+    url: ${TIMESCALE_URL:jdbc:postgresql://localhost:5433/telemetry}
+    username: ${TIMESCALE_USER:postgres}
+    password: ${TIMESCALE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  sql:
+    init:
+      mode: never
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:telemetry-service}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+telemetry:
+  topic: ${TELEMETRY_TOPIC:device-telemetry}
+  device-events-topic: ${DEVICE_EVENTS_TOPIC:device-events}

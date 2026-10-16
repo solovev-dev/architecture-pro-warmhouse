@@ -3,9 +3,16 @@
 # Exit on any error
 set -e
 
+cd "$(dirname "$0")"
+
+COMPOSE="docker compose"
+if ! docker compose version >/dev/null 2>&1; then
+  COMPOSE="docker-compose"
+fi
+
 echo "Starting the Smart Home Sensor API..."
 echo "Building and starting containers..."
-docker-compose up --build -d
+$COMPOSE up --build -d
 
 echo "Waiting for services to be ready..."
 # Wait for PostgreSQL to be ready
@@ -24,8 +31,24 @@ if ! docker exec smarthome-postgres pg_isready -U postgres > /dev/null 2>&1; the
   exit 1
 fi
 
+# Wait for the API health endpoint
+for i in {1..30}; do
+  if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+    echo "Smart Home API is ready!"
+    break
+  fi
+  echo "Waiting for Smart Home API... ($i/30)"
+  sleep 1
+done
+
+if ! curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+  echo "Error: Smart Home API did not become healthy in time."
+  echo "Check logs with: $COMPOSE logs -f"
+  exit 1
+fi
+
 echo "All services are up and running!"
 echo "The API is available at http://localhost:8080"
-echo ""
-echo "To view logs, run: docker-compose logs -f"
-echo "To stop the services, run: docker-compose down"
+echo "Temperature API is available at http://localhost:8081"
+
+echo "To stop the services, run: $COMPOSE down"

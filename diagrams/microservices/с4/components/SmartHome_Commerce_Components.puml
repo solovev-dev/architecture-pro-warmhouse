@@ -1,0 +1,77 @@
+@startuml SmartHome_Commerce_Components
+title SmartHome — C4 Components\ne-Commerce Service (Supporting)
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+' =========================================================
+' EXTERNAL CONTAINERS / SYSTEMS
+' =========================================================
+Container(APIGateway, "API Gateway", "Nginx", "Каталог и заказы из Web App")
+Container(DeviceMgmt, "Device Management Service", "Go", "Подписчик DeviceDelivered (PL/ACL)")
+ContainerDb(CommerceDb, "Commerce DB", "PostgreSQL", "Товары, корзины, заказы")
+Container(UserProfile, "Профиль пользователя", "Go", "User API")
+System_Ext(Payments, "Платежи", "Внешний платёжный провайдер")
+System_Ext(Delivery, "Доставка", "Внешний сервис доставки")
+
+' =========================================================
+' CONTAINER BOUNDARY — e-Commerce Service
+' =========================================================
+Container_Boundary(Commerce, "e-Commerce Service", "Java / Kotlin") {
+    Component(CatalogApi, "CatalogController", "HTTP / REST", "API каталог устройств")
+    Component(OrderApi, "OrderController", "HTTP / REST", "API оформление заказов")
+
+    Component(CatalogService, "CatalogService", "Java / Kotlin", "Каталог товаров\nи карточки устройств")
+    Component(CartService, "CartService", "Java / Kotlin", "Корзина покупателя")
+    Component(OrderService, "OrderService", "Java / Kotlin", "Оформление заказа:\nоплата → доставка → событие")
+
+    Component(PaymentAdapter, "PaymentAdapter", "ACL", "Антикоррупционный слой\nк платёжному провайдеру (CS/ACL)")
+    Component(DeliveryAdapter, "DeliveryAdapter", "ACL", "Антикоррупционный слой\nк службе доставки (CS/ACL)")
+    Component(DeviceDeliveredPublisher, "DeviceDeliveredPublisher", "Kafka Producer", "Публикует DeviceDelivered (PL/ACL)\nпосле успешной доставки")
+    Component(UserClient, "UserClient", "HTTP Client", "Клиент OHS User API")
+
+    ComponentDb(CatalogRepo, "CatalogRepository", "SQL", "Товары")
+    ComponentDb(CartRepo, "CartRepository", "SQL", "Корзины")
+    ComponentDb(OrderRepo, "OrderRepository", "SQL", "Заказы")
+}
+
+' =========================================================
+' RELATIONS — Callers → API
+' =========================================================
+Rel(APIGateway, CatalogApi, "Каталог", "HTTP")
+Rel(APIGateway, OrderApi, "Корзина и оформление заказа", "HTTP")
+
+' =========================================================
+' RELATIONS — Internal
+' =========================================================
+Rel_D(CatalogApi, CatalogService, "Каталог")
+Rel_D(OrderApi, CartService, "Корзина")
+Rel_R(OrderApi, OrderService, "Заказы")
+
+Rel_D(OrderService, UserClient, "Проверяет пользователя")
+Rel_D(OrderService, OrderRepo, "R/W")
+Rel_D(OrderService, CartService, "Берёт состав корзины")
+
+Rel(OrderService, PaymentAdapter, "Инициирует оплату")
+Rel(OrderService, DeliveryAdapter, "Создаёт доставку")
+Rel_R(OrderService, DeviceDeliveredPublisher, "Устройство доставлено")
+
+
+Rel(CatalogService, CatalogRepo, "R/W")
+Rel(CartService, CartRepo, "R/W")
+
+' =========================================================
+' RELATIONS — External
+' =========================================================
+Rel_R(UserClient, UserProfile, "User API", "HTTP")
+Rel_R(DeviceDeliveredPublisher, DeviceMgmt, "DeviceDelivered (PL/ACL)", "Kafka")
+Rel_D(PaymentAdapter, Payments, "Оплата (CS/ACL)", "HTTPS")
+Rel_D(DeliveryAdapter, Delivery, "Заказ на доставку (CS/ACL)", "HTTPS")
+Rel(CatalogRepo, CommerceDb, "R/W", "SQL")
+Rel(CartRepo, CommerceDb, "R/W", "SQL")
+Rel(OrderRepo, CommerceDb, "R/W", "SQL")
+
+Lay_U(Payments, CartRepo)
+
+@enduml

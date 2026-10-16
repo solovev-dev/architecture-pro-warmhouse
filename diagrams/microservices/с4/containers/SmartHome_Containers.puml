@@ -1,0 +1,137 @@
+@startuml SmartHome_Containers
+title SmartHome Platform — C4 Containers\n(Стратегия миграции: Монолит → Микросервисы)
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_TOP_DOWN()
+LAYOUT_WITH_LEGEND()
+
+' =========================================================
+' PERSONS
+' =========================================================
+Person(Customer, "Клиент", "Управляет устройствами дома, просматривает телеметрию, делает заказы")
+
+' =========================================================
+' SYSTEM BOUNDARY — SmartHome Platform
+' =========================================================
+System_Boundary(SmartHome, "Умный дом") {
+
+    ' =====================================================
+    ' SUB-BOUNDARY: Web Platform (Cloud)
+    ' =====================================================
+    Boundary(WebPlatform, "Веб-сервис Умный дом", "Cloud") {
+
+        ' ---- Front-end -----------------------------------
+        Container(WebApp, "Web App", "JavaScript / React", "Предоставляет пользователю весь функционал через браузер")
+
+        ' ---- API Gateway ----------
+        Container(APIGateway, "API Gateway", "Nginx", "Единая точка входа.\nАвторизация, rate-limiting и тд")
+
+        ' ==== LEGACY =====================================
+        Container(Monolith, "SmartHome (Монолит)", "Go", "[LEGACY]\nСуществующее приложение")
+        ContainerDb(MonolithDb, "SmartHome DB", "PostgreSQL 16", "Текущие данные монолита")
+
+        ' ---- CORE: Automation ----------------------------
+        Container(Automation, "Automation Service", "Python", "Сценарии и автоматизация:\nтриггеры по расписанию и значениям\nтелеметрии, отправка команд устройствам")
+        ContainerDb(AutomationDb, "Automation DB", "PostgreSQL", "Правила и сценарии автоматизации")
+
+        ' ---- SUPPORTING: Device Management ---------------
+        Container(DeviceMgmt, "Device Management Service", "Go", "Реестр устройствами.")
+        ContainerDb(DeviceMgmtDb, "Device DB", "PostgreSQL", "Реестр устройств, конфигурации")
+
+        ' ---- SUPPORTING: Home Management -----------------
+        Container(HomeMgmt, "Home Management Service", "Go", "Управление домами\nи пространством: дома, комнаты,\nпривязка устройств, роли (владелец / гость)")
+        ContainerDb(HomeMgmtDb, "Home DB", "PostgreSQL", "Дома, комнаты, участники, роли")
+
+        ' ---- SUPPORTING: Commerce ------------------------
+        Container(Commerce, "e-Commerce Service", "Java / Kotlin", "Каталог устройств,\nкорзина, оформление заказов.\nИнтеграция с оплатой и доставкой")
+        ContainerDb(CommerceDb, "Commerce DB", "PostgreSQL", "Товары, заказы, корзины")
+
+        ' ---- CORE: Device Management ------------------------
+        Container(DeviceControl, "Device Control", "Go", "Приём и исполнение \nкоманд на устройствах")
+        ContainerDb(DeviceControlDb, "Device Control DB", "PostgreSQL", "Состояние устройств, \nжурнал команд")
+
+        ' ---- CORE: Telemetry -----------------------------
+        Container(Telemetry, "Telemetry Service", "Go", "Сбор, хранение и передача \nтелеметрии")
+        ContainerDb(TelemetryDb, "Telemetry DB", "TimescaleDB", "Временные ряды показаний устройств")
+
+        ' ---- Message Broker ------------------------------
+        ContainerQueue(TelemetryQueue, "Telemetry Queue", "Apache Kafka", "Очередь телеметрии")
+        ContainerQueue(CommandQueue, "Command Queue", "Apache Kafka", "Очередь команд")
+    }
+
+    ' =====================================================
+    ' SUB-BOUNDARY: Home Adapter (On-Premise, у клиента)
+    ' =====================================================
+    Boundary(HomeHubBoundary, "Home Adapter", "On-Premise (у каждого клиента)") {
+        Container(TemperaturaApi, "TemperaturaApi \n(Old)", "Python\n(Raspberry Pi)")
+
+        Container(HomeHub, "Home Hub Service", "Python\n(Raspberry Pi)", "Локальный Hub в доме клиента")
+        System_Ext(SmartDevices, "Умные устройства", "Физические устройства в доме клиента:\nтермостаты, реле, датчики температуры,\nвлажности и движения.\nПротокол: Zigbee / Z-Wave / Wi-Fi")
+    }
+}
+
+' =========================================================
+' RELATIONS — External Persons
+' =========================================================
+Rel(Customer, WebApp, "Использует (новый UI)", "HTTPS")
+Rel(Customer, Monolith, "Использует (legacy)", "HTTPS")
+
+' =========================================================
+' RELATIONS — Monolith (legacy paths)
+' =========================================================
+Rel(Monolith, MonolithDb, "R/W", "SQL")
+Rel(Monolith, TemperaturaApi, "Команды и опрос показаний (legacy)", "HTTPS / REST\n(Cloudflare Tunnel)")
+
+' =========================================================
+' RELATIONS — Frontend → Gateway
+' =========================================================
+Rel(WebApp, APIGateway, "API-запросы", "HTTPS")
+
+' =========================================================
+' RELATIONS — API Gateway
+' =========================================================
+Rel(APIGateway, Commerce, "Каталог / заказы", "REST")
+Rel(APIGateway, Automation, "Управление сценариями", "HTTP")
+Rel(APIGateway, HomeMgmt, "Управление домами", "HTTP")
+Rel(APIGateway, DeviceMgmt, "Реестр устройств", "HTTP")
+
+Rel_D(APIGateway, Telemetry, "Запрос телеметрии", "HTTP")
+
+Lay_R(HomeMgmt, Telemetry)
+Lay_D(HomeMgmt, Telemetry)
+Lay_D(Telemetry, DeviceControl)
+Lay_D(TelemetryDb, DeviceControl)
+
+' =========================================================
+' RELATIONS — Services ↔ Databases
+' =========================================================
+Rel(DeviceControl, DeviceControlDb, "R/W", "SQL")
+Rel(Telemetry, TelemetryDb, "R/W", "SQL")
+Rel(Automation, AutomationDb, "R/W", "SQL")
+Rel(HomeMgmt, HomeMgmtDb, "R/W", "SQL")
+Rel(Commerce, CommerceDb, "R/W", "SQL")
+Rel(DeviceMgmt, DeviceMgmtDb, "R/W", "SQL")
+
+' =========================================================
+' RELATIONS — Home Hub ↔ System (Async)
+' =========================================================
+Rel(HomeHub, SmartDevices, "Управление и опрос состояния", "MQTT\n(Zigbee2MQTT / Z-Wave)")
+Rel(TemperaturaApi, SmartDevices, "Запросы к термостату", "MQTT")
+
+Rel_L(HomeHub, TelemetryQueue, "Pub Telemetry", "Kafka")
+Rel_L(HomeHub, CommandQueue, "Read Commands", "Kafka")
+
+Rel_R(Telemetry, TelemetryQueue, "Read Telemetry", "Kafka")
+Rel_R(DeviceControl, CommandQueue, "Pub Commands", "Kafka")
+
+' =========================================================
+' RELATIONS — Services
+' =========================================================
+Rel(Automation, HomeMgmt, "Home API",  "HTTP")
+Rel(Automation, DeviceControl, "Device \nControl API", "HTTP")
+Rel(HomeMgmt, DeviceControl, "Device \nControl API", "HTTP")
+
+Rel(Commerce, DeviceMgmt, "Device Delevered \nEvent", "Kafka")
+Rel(HomeMgmt, Telemetry, "Device Registered \nEvent", "Kafka")
+@enduml

@@ -1,19 +1,15 @@
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Copy go.mod and go.sum files
+# Copy module files first for better layer caching
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy the source code
+# Copy the source code and build
 COPY . .
-
-# Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o smarthome
 
 # Runtime stage

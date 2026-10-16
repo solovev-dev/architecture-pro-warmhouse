@@ -1,0 +1,75 @@
+asyncapi: 2.6.0
+info:
+  title: Automation Service Event API
+  version: 1.0.0
+  description: |
+    Асинхронный API сервиса Automation (Core).
+
+    - Подписывается на SensorValue (PL) из Telemetry Service.
+    - SensorValueListener передаёт событие в RuleEngine; при срабатывании
+      ActionExecutor вызывает Device Control API (HTTP CS).
+
+    Триггеры по расписанию (TriggerScheduler) работают внутри сервиса
+    и не публикуются во внешние каналы.
+
+defaultContentType: application/json
+
+servers:
+  kafka:
+    url: kafka://kafka.smarthome.local:9092
+    protocol: kafka
+    description: Apache Kafka
+
+channels:
+  smart-home.telemetry.sensor-value:
+    description: Нормализованные показания датчиков (PL) из Telemetry
+    subscribe:
+      operationId: consumeSensorValue
+      summary: Обработка телеметрии правилами автоматизации
+      description: |
+        SensorValueListener → RuleEngine: проверка активных правил
+        с triggerType = SENSOR_THRESHOLD.
+      message:
+        $ref: '#/components/messages/SensorValue'
+
+components:
+  messages:
+    SensorValue:
+      name: SensorValue
+      title: Нормализованное показание датчика (PL)
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SensorValuePayload'
+      examples:
+        - name: temperatureBelowThreshold
+          payload:
+            sensorId: "550e8400-e29b-41d4-a716-446655440000"
+            value: 17.2
+            unit: CELSIUS
+            timestamp: "2026-10-17T12:00:00Z"
+            deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            locationId: "c56a4180-65aa-42ec-a945-5fd21dec0538"
+
+  schemas:
+    SensorValuePayload:
+      type: object
+      required: [sensorId, value, unit, timestamp]
+      properties:
+        sensorId:
+          type: string
+          format: uuid
+        value:
+          type: number
+          format: float
+        unit:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        deviceId:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+          nullable: true

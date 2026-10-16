@@ -1,0 +1,743 @@
+openapi: 3.0.3
+info:
+  title: Home Management Service REST API
+  description: |
+    Синхронный API сервиса Home Management (Supporting) — CRUD домов и комнат,
+    управление участниками/ролями, привязка устройств к дому/комнатам и
+    отправка команд через Device Control API (CS).
+
+    Потребители: Web App через API Gateway, Automation Service (Home API CS).
+  version: 1.0.0
+  contact:
+    name: SmartHome Platform
+
+servers:
+  - url: https://api.smarthome.local/home-management
+    description: Production
+  - url: http://localhost:8086
+    description: Local
+
+tags:
+  - name: Homes
+    description: Управление домами
+  - name: Rooms
+    description: Комнаты внутри дома
+  - name: Memberships
+    description: Участники и роли
+  - name: HomeDevices
+    description: Привязка устройств и управление ими в доме
+
+paths:
+  /v1/homes:
+    get:
+      tags: [Homes]
+      summary: Список домов пользователя
+      operationId: listHomes
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Список домов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      tags: [Homes]
+      summary: Создать дом
+      operationId: createHome
+      description: Создаёт дом и добавляет создателя с ролью OWNER.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHomeRequest'
+      responses:
+        '201':
+          description: Дом создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Home'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/homes/{homeId}:
+    get:
+      tags: [Homes]
+      summary: Получить дом
+      operationId: getHome
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+      responses:
+        '200':
+          description: Дом
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Home'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Homes]
+      summary: Обновить дом
+      operationId: updateHome
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHomeRequest'
+      responses:
+        '200':
+          description: Дом обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Home'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Homes]
+      summary: Удалить дом
+      operationId: deleteHome
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+      responses:
+        '204':
+          description: Дом удалён
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/homes/{homeId}/rooms:
+    get:
+      tags: [Rooms]
+      summary: Список комнат дома
+      operationId: listRooms
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+      responses:
+        '200':
+          description: Список комнат
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Rooms]
+      summary: Создать комнату
+      operationId: createRoom
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+      responses:
+        '201':
+          description: Комната создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/rooms/{roomId}:
+    get:
+      tags: [Rooms]
+      summary: Получить комнату
+      operationId: getRoom
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '200':
+          description: Комната
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Rooms]
+      summary: Обновить комнату
+      operationId: updateRoom
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoomRequest'
+      responses:
+        '200':
+          description: Комната обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Rooms]
+      summary: Удалить комнату
+      operationId: deleteRoom
+      parameters:
+        - $ref: '#/components/parameters/RoomId'
+      responses:
+        '204':
+          description: Комната удалена
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/homes/{homeId}/memberships:
+    get:
+      tags: [Memberships]
+      summary: Участники дома
+      operationId: listMemberships
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+      responses:
+        '200':
+          description: Список участников
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Memberships]
+      summary: Пригласить / добавить участника
+      operationId: addMembership
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMembershipRequest'
+      responses:
+        '201':
+          description: Участник добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeMembership'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Пользователь уже участник дома
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/memberships/{membershipId}:
+    get:
+      tags: [Memberships]
+      summary: Получить членство
+      operationId: getMembership
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+      responses:
+        '200':
+          description: Членство
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeMembership'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Memberships]
+      summary: Изменить роль участника
+      operationId: updateMembership
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMembershipRequest'
+      responses:
+        '200':
+          description: Роль обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeMembership'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Memberships]
+      summary: Удалить участника
+      operationId: removeMembership
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+      responses:
+        '204':
+          description: Участник удалён
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/homes/{homeId}/devices:
+    get:
+      tags: [HomeDevices]
+      summary: Устройства, привязанные к дому
+      operationId: listHomeDevices
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+        - name: roomId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Список привязок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeDeviceList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [HomeDevices]
+      summary: Привязать устройство к дому / комнате
+      operationId: bindDevice
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindDeviceRequest'
+      responses:
+        '201':
+          description: Устройство привязано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeDevice'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Устройство уже привязано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/homes/{homeId}/devices/{deviceId}:
+    put:
+      tags: [HomeDevices]
+      summary: Переместить устройство в другую комнату
+      operationId: rebindDevice
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RebindDeviceRequest'
+      responses:
+        '200':
+          description: Привязка обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeDevice'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [HomeDevices]
+      summary: Отвязать устройство от дома
+      operationId: unbindDevice
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '204':
+          description: Устройство отвязано
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/homes/{homeId}/devices/{deviceId}/commands:
+    post:
+      tags: [HomeDevices]
+      summary: Отправить команду устройству в доме
+      operationId: sendDeviceCommand
+      description: |
+        Проксирует команду в Device Control API (CS) после проверки
+        членства пользователя в доме и прав роли.
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HomeDeviceCommandRequest'
+            examples:
+              setTemperature:
+                value:
+                  userId: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                  type: SET_TARGET_TEMPERATURE
+                  params:
+                    targetTemperature: 22.5
+                    unit: CELSIUS
+      responses:
+        '202':
+          description: Команда принята Device Control
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeDeviceCommandResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    HomeId:
+      name: homeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RoomId:
+      name: roomId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MembershipId:
+      name: membershipId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Недостаточно прав
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    HomeRole:
+      type: string
+      enum: [OWNER, GUEST]
+      description: OWNER — полный доступ; GUEST — ограниченный доступ к устройствам
+
+    CreateHomeRequest:
+      type: object
+      required: [ownerId, name]
+      properties:
+        ownerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        address:
+          type: string
+        timezone:
+          type: string
+          example: Europe/Moscow
+
+    UpdateHomeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        timezone:
+          type: string
+
+    Home:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    HomeList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Home'
+        total:
+          type: integer
+
+    CreateRoomRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: Living Room
+        floor:
+          type: integer
+
+    UpdateRoomRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        floor:
+          type: integer
+
+    Room:
+      type: object
+      required: [id, homeId, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        homeId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        floor:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    RoomList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Room'
+
+    CreateMembershipRequest:
+      type: object
+      required: [userId, role]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/HomeRole'
+
+    UpdateMembershipRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: '#/components/schemas/HomeRole'
+
+    HomeMembership:
+      type: object
+      required: [id, userId, homeId, role, joinedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        homeId:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/HomeRole'
+        joinedAt:
+          type: string
+          format: date-time
+
+    MembershipList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HomeMembership'
+
+    BindDeviceRequest:
+      type: object
+      required: [deviceId]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        roomId:
+          type: string
+          format: uuid
+          nullable: true
+
+    RebindDeviceRequest:
+      type: object
+      required: [roomId]
+      properties:
+        roomId:
+          type: string
+          format: uuid
+          nullable: true
+
+    HomeDevice:
+      type: object
+      required: [deviceId, homeId]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        homeId:
+          type: string
+          format: uuid
+        roomId:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+          description: Отображаемое имя (из реестра / локальное)
+          nullable: true
+        boundAt:
+          type: string
+          format: date-time
+
+    HomeDeviceList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HomeDevice'
+
+    HomeDeviceCommandRequest:
+      type: object
+      required: [userId, type]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [POWER_ON, POWER_OFF, SET_TARGET_TEMPERATURE, SET_ATTRIBUTE]
+        params:
+          type: object
+          additionalProperties: true
+
+    HomeDeviceCommandResponse:
+      type: object
+      required: [commandId, status]
+      properties:
+        commandId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, PUBLISHED]
+          description: Статус, возвращённый Device Control
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

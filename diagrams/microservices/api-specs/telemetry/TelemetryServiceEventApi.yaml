@@ -1,0 +1,191 @@
+asyncapi: 2.6.0
+info:
+  title: Telemetry Service Event API
+  version: 1.0.0
+  description: |
+    Асинхронный API сервиса Telemetry (Core).
+
+    - Читает сырую телеметрию из Telemetry Queue (Home Hub).
+    - Подписывается на SensorRegistered (PL) из Device Management.
+    - Публикует SensorValue (PL) для Automation Service после ingest.
+
+defaultContentType: application/json
+
+servers:
+  kafka:
+    url: kafka://kafka.smarthome.local:9092
+    protocol: kafka
+    description: Apache Kafka
+
+channels:
+  smart-home.telemetry.raw:
+    description: Поток сырой телеметрии от Home Hub (Telemetry Queue)
+    publish:
+      operationId: publishRawTelemetry
+      summary: Публикация сырой телеметрии
+      description: Home Hub публикует показания датчиков (с локальной буферизацией).
+      message:
+        $ref: '#/components/messages/RawTelemetry'
+    subscribe:
+      operationId: consumeRawTelemetry
+      summary: Ingest сырой телеметрии
+      description: |
+        TelemetryConsumer → IngestService: валидация, нормализация,
+        запись в TimescaleDB и публикация SensorValue.
+      message:
+        $ref: '#/components/messages/RawTelemetry'
+
+  smart-home.device-management.sensor-registered:
+    description: Событие регистрации датчика (PL) из Device Management
+    subscribe:
+      operationId: consumeSensorRegistered
+      summary: Регистрация метаданных датчика
+      description: SensorRegistryListener сохраняет SensorMeta.
+      message:
+        $ref: '#/components/messages/SensorRegistered'
+
+  smart-home.telemetry.sensor-value:
+    description: Доменное событие SensorValue (PL) для Automation
+    publish:
+      operationId: publishSensorValue
+      summary: Публикация нормализованного показания
+      description: |
+        После успешного ingest Telemetry публикует SensorValue.
+        Automation Service подписывается и передаёт событие в RuleEngine.
+      message:
+        $ref: '#/components/messages/SensorValue'
+
+components:
+  messages:
+    RawTelemetry:
+      name: RawTelemetry
+      title: Сырое показание с Home Hub
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          messageId:
+            type: string
+            format: uuid
+          homeId:
+            type: string
+            format: uuid
+      payload:
+        $ref: '#/components/schemas/RawTelemetryPayload'
+      examples:
+        - name: temperatureReading
+          payload:
+            sensorId: "550e8400-e29b-41d4-a716-446655440000"
+            deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            homeId: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+            value: 21.8
+            unit: C
+            recordedAt: "2026-10-17T12:00:00Z"
+            hubSentAt: "2026-10-17T12:00:01Z"
+
+    SensorRegistered:
+      name: SensorRegistered
+      title: Датчик зарегистрирован в экосистеме
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SensorRegisteredPayload'
+      examples:
+        - name: temperatureSensor
+          payload:
+            sensorId: "550e8400-e29b-41d4-a716-446655440000"
+            deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            kind: TEMPERATURE
+            unit: CELSIUS
+            locationId: "c56a4180-65aa-42ec-a945-5fd21dec0538"
+            occurredAt: "2026-10-17T10:00:00Z"
+
+    SensorValue:
+      name: SensorValue
+      title: Нормализованное показание датчика (PL)
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SensorValuePayload'
+      examples:
+        - name: normalizedTemperature
+          payload:
+            sensorId: "550e8400-e29b-41d4-a716-446655440000"
+            value: 21.8
+            unit: CELSIUS
+            timestamp: "2026-10-17T12:00:00Z"
+            deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            locationId: "c56a4180-65aa-42ec-a945-5fd21dec0538"
+
+  schemas:
+    RawTelemetryPayload:
+      type: object
+      required: [sensorId, value, unit, recordedAt]
+      properties:
+        sensorId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        homeId:
+          type: string
+          format: uuid
+        value:
+          type: number
+          format: float
+        unit:
+          type: string
+          description: Единица измерения как пришла с устройства (может быть нормализована)
+        recordedAt:
+          type: string
+          format: date-time
+        hubSentAt:
+          type: string
+          format: date-time
+
+    SensorRegisteredPayload:
+      type: object
+      required: [sensorId, deviceId, kind, unit, occurredAt]
+      properties:
+        sensorId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          example: TEMPERATURE
+        unit:
+          type: string
+          example: CELSIUS
+        locationId:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+
+    SensorValuePayload:
+      type: object
+      required: [sensorId, value, unit, timestamp]
+      properties:
+        sensorId:
+          type: string
+          format: uuid
+        value:
+          type: number
+          format: float
+        unit:
+          type: string
+          example: CELSIUS
+        timestamp:
+          type: string
+          format: date-time
+        deviceId:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+          nullable: true

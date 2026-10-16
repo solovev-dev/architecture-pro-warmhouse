@@ -1,0 +1,26 @@
+
+@startuml
+title SmartHouse (AS IS)
+
+top to bottom direction
+
+!includeurl https://raw.githubusercontent.com/RicardoNiepel/C4-PlantUML/master/C4_Component.puml
+
+Person(Customer, "Клиент", "Пользователь приложения - управляет отоплением в доме")
+Person_Ext(Engineer, "Специалист внедрения", "Подключает системы отопления и регистрирует датчики", $sprite=person2)
+
+System(SmartHouse, "Умный дом", "Приложение умного отопления. \nУправление и мониторинг отопления в доме")
+System_Ext(TemperatureApi, "Модуль управления отоплением", "Внешний модуль управления отоплением в доме клиента")
+
+System_Ext(Sensor1, "Терморегулятор 1", "Терморегулятор", $sprite=robot)
+System_Ext(Sensor2, "Терморегулятор 2", "Терморегулятор", $sprite=robot)
+
+Rel(Customer, SmartHouse,"Управление отоплением/проверка температуры")
+Rel(Engineer,TemperatureApi,"Подключение и настройка")
+Rel_L(TemperatureApi,SmartHouse,"Регистрация датчиков при подключении")
+Rel_R(SmartHouse,TemperatureApi,"Получение показаний датчиков")
+
+Rel_D(TemperatureApi,Sensor1," ")
+Rel_D(TemperatureApi,Sensor2," ")
+@enduml
+```
