@@ -1,10 +1,6 @@
--- Create the database if it doesn't exist
-CREATE DATABASE smarthome;
+-- Schema for smart_home sensors
+-- Runs against POSTGRES_DB (smarthome) created by the Postgres image
 
--- Connect to the database
-\c smarthome;
-
--- Create the sensors table
 CREATE TABLE IF NOT EXISTS sensors (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -17,7 +13,6 @@ CREATE TABLE IF NOT EXISTS sensors (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Create indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_sensors_type ON sensors(type);
 CREATE INDEX IF NOT EXISTS idx_sensors_location ON sensors(location);
 CREATE INDEX IF NOT EXISTS idx_sensors_status ON sensors(status);

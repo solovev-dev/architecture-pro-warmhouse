@@ -1,0 +1,307 @@
+openapi: 3.0.3
+info:
+  title: Device Control REST API
+  description: |
+    Синхронный Customer/Supplier API сервиса Device Control (Core).
+
+    Принимает команды управления устройствами (вкл/выкл, целевая температура и т.п.),
+    валидирует и авторизует запрос, пишет журнал команд и публикует команду в Command Queue.
+    Вызывающему сразу возвращается `commandId` и статус `PENDING` / `PUBLISHED`.
+
+    Потребители: Automation Service, Home Management Service.
+  version: 1.0.0
+  contact:
+    name: SmartHome Platform
+
+servers:
+  - url: https://api.smarthome.local/device-control
+    description: Production
+  - url: http://localhost:8082
+    description: Local
+
+tags:
+  - name: Commands
+    description: Отправка и журнал команд
+  - name: DeviceState
+    description: Текущее состояние устройств
+
+paths:
+  /v1/commands:
+    post:
+      tags: [Commands]
+      summary: Отправить команду устройству
+      operationId: executeCommand
+      description: |
+        Валидация → авторизация (User API) → запись в журнал → публикация в Command Queue.
+        Результат исполнения на устройстве приходит асинхронно (см. AsyncAPI).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteCommandRequest'
+            examples:
+              setTargetTemperature:
+                summary: Установить целевую температуру
+                value:
+                  deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  userId: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                  type: SET_TARGET_TEMPERATURE
+                  params:
+                    targetTemperature: 22.5
+                    unit: CELSIUS
+              powerOn:
+                summary: Включить отопление
+                value:
+                  deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  userId: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                  type: POWER_ON
+                  params: {}
+      responses:
+        '202':
+          description: Команда принята и поставлена в очередь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Command'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/commands/{commandId}:
+    get:
+      tags: [Commands]
+      summary: Получить команду по идентификатору
+      operationId: getCommandById
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: Команда найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Command'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/devices/{deviceId}/commands:
+    get:
+      tags: [Commands]
+      summary: Журнал команд по устройству
+      operationId: getCommandHistoryByDevice
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/CommandStatus'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Список команд
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/devices/{deviceId}/state:
+    get:
+      tags: [DeviceState]
+      summary: Текущее состояние устройства
+      operationId: getDeviceState
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Снимок состояния
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceState'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    CommandId:
+      name: commandId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Требуется аутентификация
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Недостаточно прав
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    CommandType:
+      type: string
+      enum:
+        - POWER_ON
+        - POWER_OFF
+        - SET_TARGET_TEMPERATURE
+        - SET_ATTRIBUTE
+      description: Тип команды управления устройством
+
+    CommandStatus:
+      type: string
+      enum:
+        - PENDING
+        - PUBLISHED
+        - APPLIED
+        - FAILED
+      description: |
+        PENDING — принята, ещё не опубликована;
+        PUBLISHED — в Command Queue;
+        APPLIED — исполнена Home Hub;
+        FAILED — ошибка исполнения.
+
+    ExecuteCommandRequest:
+      type: object
+      required: [deviceId, userId, type]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/CommandType'
+        params:
+          type: object
+          additionalProperties: true
+          description: Параметры команды (зависят от type)
+          example:
+            targetTemperature: 22.5
+            unit: CELSIUS
+
+    Command:
+      type: object
+      required: [id, deviceId, userId, type, params, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/CommandType'
+        params:
+          type: object
+          additionalProperties: true
+        status:
+          $ref: '#/components/schemas/CommandStatus'
+        failureReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CommandList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Command'
+        total:
+          type: integer
+          minimum: 0
+
+    DeviceState:
+      type: object
+      required: [deviceId, attributes, updatedAt]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        attributes:
+          type: object
+          additionalProperties: true
+          description: Текущие атрибуты устройства (powered, targetTemperature и т.д.)
+          example:
+            powered: true
+            targetTemperature: 22.5
+            currentTemperature: 21.8
+            unit: CELSIUS
+        lastCommandId:
+          type: string
+          format: uuid
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

@@ -1,1 +1,8 @@
 .DS_Store
+
+# AI for OpenIDE — local agent state (chat transcripts, memory, snapshots; may contain secrets).
+.aiforopenide/
+!.aiforopenide/config.json
+/.idea/
+/.cursor
+/ai_docs/

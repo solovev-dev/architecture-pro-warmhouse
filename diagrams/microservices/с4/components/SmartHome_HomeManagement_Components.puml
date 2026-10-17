@@ -1,0 +1,72 @@
+@startuml SmartHome_HomeManagement_Components
+title SmartHome — C4 Components\nHome Management Service (Supporting)
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+' =========================================================
+' EXTERNAL CONTAINERS / SYSTEMS
+' =========================================================
+Container(APIGateway, "API Gateway", "Nginx", "Управление домами из Web App")
+Container(Automation, "Automation Service", "Python", "Вызывает Home API (CS)")
+Container(DeviceControl, "Device Control", "Go", "Исполнение команд на устройствах")
+Container(DeviceMgmt, "Device Management Service", "Go", "Издаёт DeviceRegistered (PL)")
+ContainerDb(HomeMgmtDb, "Home DB", "PostgreSQL", "Дома, комнаты, участники, роли")
+Container(UserProfile, "Профиль пользователя", "Go" ,"User API")
+
+' =========================================================
+' CONTAINER BOUNDARY — Home Management
+' =========================================================
+Container_Boundary(HomeMgmt, "Home Management Service", "Go") {
+    Component(HomeApi, "HomeController", "HTTP / REST", "CRUD домов/комнат")
+    Component(HomeDeviceApi, "DeviceController", "HTTP / REST", "Привязка устройств и управление ими")
+    Component(MembershipApi, "MembershipController", "HTTP / REST", "API управления ролями/участниками")
+
+    Component(HomeService, "HomeService", "Go", "Дома и пространства:\nсоздание, настройки, удаление")
+    Component(RoomService, "RoomService", "Go", "Комнаты внутри дома\nи их атрибуты")
+    Component(MembershipService, "MembershipService", "Go", "Роли владелец / гость,\nприглашения участников")
+    Component(DeviceService, "DeviceService", "Go", "Привязка устройств к дому/комнатам и управление им")
+    Component(DeviceRegisteredListener, "DeviceRegisteredListener", "Kafka Consumer", "Обрабатывает DeviceRegistered (PL)\nиз Device Management")
+
+    Component(DeviceControlClient, "DeviceControlClient", "HTTP Client", "CS-клиент Device Control API")
+    Component(UserClient, "UserClient", "HTTP Client", "Клиент User API")
+
+    ComponentDb(HomeRepo, "HomeRepository", "SQL", "Персистентность домов,\nкомнат, ролей, привязок")
+}
+
+' =========================================================
+' RELATIONS — Callers → API
+' =========================================================
+Rel(APIGateway, HomeApi, "Управление домами", "HTTP")
+Rel(APIGateway, MembershipApi, "Управление ролями", "HTTP")
+Rel(APIGateway, HomeDeviceApi, "Управление устройствами в доме", "HTTP")
+Rel(Automation, HomeApi, "Home API (CS)", "HTTP")
+
+' =========================================================
+' RELATIONS — Internal
+' =========================================================
+Rel(HomeApi, HomeService, "Дома")
+Rel(HomeApi, RoomService, "Комнаты")
+Rel(MembershipApi, MembershipService, "Участники / роли")
+Rel(HomeDeviceApi, DeviceService, "Привязка устройств / управление ими")
+
+Rel(HomeService, UserClient, "Проверяет пользователя"  )
+Rel(MembershipService, UserClient, "Резолвит пользователя"  )
+Rel(DeviceService, DeviceControlClient, "Команды устройству"  )
+Rel(DeviceRegisteredListener, DeviceService, "Регистрирует устройство"  )
+
+Rel(HomeService, HomeRepo, "R/W"  )
+Rel(RoomService, HomeRepo, "R/W"  )
+Rel(MembershipService, HomeRepo, "R/W"  )
+Rel(DeviceService, HomeRepo, "R/W"  )
+
+' =========================================================
+' RELATIONS — External
+' =========================================================
+Rel(DeviceControlClient, DeviceControl, "Device Control API (CS)", "HTTP")
+Rel(UserClient, UserProfile, "OHS User API", "HTTP")
+Rel(DeviceRegisteredListener, DeviceMgmt, "Читает DeviceRegistered (PL) \n и регистрирует устройство в доме клиента", "Kafka")
+Rel(HomeRepo, HomeMgmtDb, "R/W", "SQL")
+
+@enduml

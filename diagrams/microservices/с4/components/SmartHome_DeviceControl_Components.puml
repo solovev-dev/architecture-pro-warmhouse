@@ -1,0 +1,55 @@
+@startuml SmartHome_DeviceControl_Components
+title SmartHome — C4 Components\nDevice Control (Core)
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+' =========================================================
+' EXTERNAL CONTAINERS / SYSTEMS
+' =========================================================
+Container(Automation, "Automation Service", "Python", "Сценарии; вызывают Device Control API")
+Container(HomeMgmt, "Home Management Service", "Go", "Управление домом; вызывает Device Control API")
+ContainerQueue(CommandQueue, "Command Queue", "Apache Kafka", "Очередь команд для Home Hub")
+ContainerQueue(ResponseQueue, "Command Response Queue", "Apache Kafka", "Очередь ответов от Home Hub")
+ContainerDb(DeviceControlDb, "Device Control DB", "PostgreSQL", "Состояние устройств, журнал команд")
+Container(UserProfile, "Профиль пользователя", "GO", "Проверка прав пользователя")
+
+' =========================================================
+' CONTAINER BOUNDARY — Device Control
+' =========================================================
+Container_Boundary(DeviceControl, "Device Control", "Go") {
+    Component(CommandApi, "CommandController", "HTTP / REST", "Принимает команды управления устройствами\n(вкл/выкл, целевая температура и т.п.)")
+    Component(CommandService, "CommandService", "Go", "Оркестрация команд:\nвалидация, авторизация,\nзапись в журнал, публикация")
+    Component(DeviceStateService, "DeviceStateService", "Go", "Текущее состояние устройств\nи результат исполнения команд")
+    Component(CommandPublisher, "CommandPublisher", "Kafka Producer", "Публикует команды\nв Command Queue (PL)")
+    Component(UserClient, "UserClient", "HTTP Client", "Клиент User API\nдля проверки пользователя")
+    ComponentDb(CommandRepo, "CommandRepository", "SQL", "Журнал команд\n(история, статусы)")
+    ComponentDb(StateRepo, "StateRepository", "SQL", "Снимки состояния устройств")
+}
+
+' =========================================================
+' RELATIONS — Callers → API
+' =========================================================
+Rel(Automation, CommandApi, "Device Control API (CS)", "HTTP")
+Rel(HomeMgmt, CommandApi, "Device Control API (CS)", "HTTP")
+
+' =========================================================
+' RELATIONS — Internal
+' =========================================================
+Rel(CommandApi, CommandService, "Передаёт команду")
+Rel(CommandService, UserClient, "Проверяет пользователя")
+Rel(CommandService, DeviceStateService, "Обновляет/читает состояние")
+Rel(CommandService, CommandPublisher, "Публикует команду")
+Rel(CommandService, CommandRepo, "Пишет журнал")
+Rel(DeviceStateService, StateRepo, "R/W состояние")
+
+' =========================================================
+' RELATIONS — External
+' =========================================================
+Rel(UserClient, UserProfile, "OHS User API", "HTTP")
+Rel(CommandPublisher, CommandQueue, "Pub Commands", "Kafka")
+Rel(CommandRepo, DeviceControlDb, "R/W", "SQL")
+Rel(StateRepo, DeviceControlDb, "R/W", "SQL")
+Rel(ResponseQueue, CommandService, "Результат исполнения команды", "Kafka")
+@enduml

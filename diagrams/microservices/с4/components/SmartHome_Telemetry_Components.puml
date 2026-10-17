@@ -1,0 +1,58 @@
+@startuml SmartHome_Telemetry_Components
+title SmartHome — C4 Components\nTelemetry Service (Core)
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+' =========================================================
+' EXTERNAL CONTAINERS / SYSTEMS
+' =========================================================
+Container(APIGateway, "API Gateway", "Nginx", "Запросы телеметрии от Web App")
+Container(Automation, "Automation Service", "Python", "Подписчик SensorValue (PL)")
+Container(DeviceMgmt, "Device Management Service", "Go", "Издаёт SensorRegistered (PL)")
+ContainerQueue(TelemetryQueue, "Telemetry Queue", "Apache Kafka", "Поток телеметрии от Home Hub")
+ContainerDb(TelemetryDb, "Telemetry DB", "TimescaleDB", "Временные ряды показаний")
+
+' =========================================================
+' CONTAINER BOUNDARY — Telemetry Service
+' =========================================================
+Container_Boundary(Telemetry, "Telemetry Service", "Go") {
+    Component(QueryApi, "QueryController", "HTTP / REST", "Отдаёт текущие и исторические\nпоказания по устройству / локации")
+    Component(SearchService, "SearchService", "Go", "Агрегации и выборки\nвременных рядов")
+    Component(TelemetryConsumer, "TelemetryConsumer", "KafkaConsumer", "Читает сырую телеметрию\nиз Telemetry Queue")
+    Component(IngestService, "IngestService", "Go", "Валидация, нормализация,\nзапись показаний")
+    Component(SensorRegistryListener, "SensorRegistryListener", "Kafka Consumer", "Обрабатывает SensorRegistered\nиз Device Management (PL)")
+    Component(SensorValuePublisher, "SensorValuePublisher", "Kafka Producer", "Публикует SensorValue (PL)\nдля Automation")
+    ComponentDb(TelemetryRepo, "TelemetryRepository", "SQL", "Запись/чтение\nвременных рядов")
+    ComponentDb(SensorMetaRepo, "SensorMetaRepository", "SQL", "Метаданные зарегистрированных\nдатчиков")
+}
+
+' =========================================================
+' RELATIONS — Callers → API
+' =========================================================
+Rel(APIGateway, QueryApi, "Запрос телеметрии", "HTTP")
+
+' =========================================================
+' RELATIONS — Internal
+' =========================================================
+Rel(QueryApi, SearchService, "Запрос данных")
+Rel(SearchService, TelemetryRepo, "Читает ряды")
+Rel(SearchService, SensorMetaRepo, "Читает метаданные")
+
+Rel(TelemetryConsumer, IngestService, "Передаёт сообщение")
+Rel(IngestService, TelemetryRepo, "Пишет показания")
+Rel(IngestService, SensorValuePublisher, "Публикует SensorValue")
+
+Rel(SensorRegistryListener, SensorMetaRepo, "Регистрирует датчик")
+
+' =========================================================
+' RELATIONS — External
+' =========================================================
+Rel(TelemetryConsumer, TelemetryQueue, "Read Telemetry", "Kafka")
+Rel(SensorRegistryListener, DeviceMgmt, "SensorRegistered (PL)", "Kafka")
+Rel(SensorValuePublisher, Automation, "SensorValue (PL)", "Kafka")
+Rel(TelemetryRepo, TelemetryDb, "R/W", "SQL")
+Rel(SensorMetaRepo, TelemetryDb, "R/W", "SQL")
+
+@enduml

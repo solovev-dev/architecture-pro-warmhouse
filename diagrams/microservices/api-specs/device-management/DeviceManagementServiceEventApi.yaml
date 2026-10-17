@@ -1,0 +1,185 @@
+asyncapi: 2.6.0
+info:
+  title: Device Management Service Event API
+  version: 1.0.0
+  description: |
+    Асинхронный API сервиса Device Management (Supporting).
+
+    - Подписывается на DeviceDelivered (PL/ACL) из e-Commerce.
+    - Публикует DeviceRegistered (PL) → Home Management.
+    - Публикует SensorRegistered (PL) → Telemetry Service.
+
+defaultContentType: application/json
+
+servers:
+  kafka:
+    url: kafka://kafka.smarthome.local:9092
+    protocol: kafka
+    description: Apache Kafka
+
+channels:
+  smart-home.commerce.device-delivered:
+    description: Устройство доставлено клиенту (PL/ACL из e-Commerce)
+    subscribe:
+      operationId: consumeDeviceDelivered
+      summary: Создание записи о новом устройстве после доставки
+      description: |
+        DeviceDeliveredListener → RegistryService создаёт устройство
+        в реестре и публикует DeviceRegistered.
+      message:
+        $ref: '#/components/messages/DeviceDelivered'
+
+  smart-home.device-management.device-registered:
+    description: Устройство зарегистрировано в экосистеме (PL)
+    publish:
+      operationId: publishDeviceRegistered
+      summary: Уведомление о регистрации устройства
+      description: Home Management подписывается и привязывает устройство к дому.
+      message:
+        $ref: '#/components/messages/DeviceRegistered'
+
+  smart-home.device-management.sensor-registered:
+    description: Датчик зарегистрирован в экосистеме (PL)
+    publish:
+      operationId: publishSensorRegistered
+      summary: Уведомление о регистрации датчика
+      description: Telemetry Service сохраняет SensorMeta для последующего ingest.
+      message:
+        $ref: '#/components/messages/SensorRegistered'
+
+components:
+  messages:
+    DeviceDelivered:
+      name: DeviceDelivered
+      title: Устройство доставлено
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DeviceDeliveredPayload'
+      examples:
+        - name: thermostatDelivered
+          payload:
+            orderId: "b3e1c2d4-1234-4abc-9def-0123456789ab"
+            userId: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+            productId: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+            deviceTypeId: "c56a4180-65aa-42ec-a945-5fd21dec0538"
+            serialNumber: "SN-TRVZB-001234"
+            homeId: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+            deliveredAt: "2026-10-17T09:00:00Z"
+
+    DeviceRegistered:
+      name: DeviceRegistered
+      title: Устройство зарегистрировано
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DeviceRegisteredPayload'
+      examples:
+        - name: thermostatRegistered
+          payload:
+            deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            typeId: "c56a4180-65aa-42ec-a945-5fd21dec0538"
+            homeId: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+            serialNumber: "SN-TRVZB-001234"
+            name: "Термостат гостиная"
+            protocol: ZIGBEE
+            status: REGISTERED
+            occurredAt: "2026-10-17T10:00:00Z"
+
+    SensorRegistered:
+      name: SensorRegistered
+      title: Датчик зарегистрирован
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SensorRegisteredPayload'
+      examples:
+        - name: temperatureSensor
+          payload:
+            sensorId: "550e8400-e29b-41d4-a716-446655440000"
+            deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            kind: TEMPERATURE
+            unit: CELSIUS
+            locationId: "c56a4180-65aa-42ec-a945-5fd21dec0538"
+            occurredAt: "2026-10-17T10:00:00Z"
+
+  schemas:
+    DeviceDeliveredPayload:
+      type: object
+      required: [orderId, userId, productId, deviceTypeId, serialNumber, deliveredAt]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        deviceTypeId:
+          type: string
+          format: uuid
+        serialNumber:
+          type: string
+        homeId:
+          type: string
+          format: uuid
+          nullable: true
+        deliveredAt:
+          type: string
+          format: date-time
+
+    DeviceRegisteredPayload:
+      type: object
+      required: [deviceId, typeId, serialNumber, name, status, occurredAt]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        typeId:
+          type: string
+          format: uuid
+        homeId:
+          type: string
+          format: uuid
+          nullable: true
+        roomId:
+          type: string
+          format: uuid
+          nullable: true
+        serialNumber:
+          type: string
+        name:
+          type: string
+        protocol:
+          type: string
+          enum: [ZIGBEE, ZWAVE, WIFI, MQTT]
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, REGISTERED, ACTIVE, INACTIVE, DECOMMISSIONED]
+        occurredAt:
+          type: string
+          format: date-time
+
+    SensorRegisteredPayload:
+      type: object
+      required: [sensorId, deviceId, kind, unit, occurredAt]
+      properties:
+        sensorId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          example: TEMPERATURE
+        unit:
+          type: string
+          example: CELSIUS
+        locationId:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time

@@ -1,0 +1,130 @@
+@startuml SmartHome_Telemetry_Code
+title SmartHome — UML Class Diagram\nTelemetry Service (критическая BL)
+
+skinparam classAttributeIconSize 0
+
+' =========================================================
+' Сценарии (из C4 Components + Context Map):
+' 1) Ingest: сырая телеметрия → validate → normalize → save → publish SensorValue (PL)
+' 2) Query: текущие / исторические показания и агрегации (по sensor / location)
+' 3) RegisterSensor: обработка SensorRegistered (PL) → метаданные датчика
+' =========================================================
+
+class Reading {
+  +String id
+  +String sensorId
+  +float value
+  +String unit
+  +DateTime timestamp
+  +boolean isValid()
+  +Reading normalize(String canonicalUnit)
+}
+
+class SensorMeta {
+  +String sensorId
+  +String deviceId
+  +String kind
+  +String unit
+  +String locationId
+  +DateTime registeredAt
+  +boolean matchesUnit(String unit)
+}
+
+class AggregationResult {
+  +String sensorId
+  +String function
+  +float value
+  +DateTime from
+  +DateTime to
+}
+
+class ReadingValidator {
+  +void validate(Reading reading, SensorMeta meta)
+  +boolean isInRange(Reading reading)
+  +boolean isRegistered(String sensorId)
+}
+
+class ReadingNormalizer {
+  +Reading normalize(Reading reading, SensorMeta meta)
+  +float convertUnit(float value, String from, String to)
+}
+
+class IngestReading {
+  +void execute(RawTelemetryMessage message)
+  -Reading buildReading(RawTelemetryMessage message)
+  -void persistAndPublish(Reading reading)
+}
+
+class SearchTelemetry {
+  +List<Reading> current(String sensorId)
+  +List<Reading> history(String sensorId, DateTime from, DateTime to)
+  +List<Reading> byLocation(String locationId, DateTime from, DateTime to)
+  +AggregationResult aggregate(String sensorId, String function, DateTime from, DateTime to)
+}
+
+class RegisterSensor {
+  +SensorMeta execute(SensorRegisteredEvent event)
+}
+
+class SensorValue {
+  +String sensorId
+  +float value
+  +String unit
+  +DateTime timestamp
+  +{static} SensorValue from(Reading reading)
+}
+
+class SensorRegisteredEvent {
+  +String sensorId
+  +String deviceId
+  +String kind
+  +String unit
+  +String locationId
+  +DateTime occurredAt
+}
+
+interface TelemetryRepository {
+  +void save(Reading reading)
+  +List<Reading> findBySensor(String sensorId, DateTime from, DateTime to)
+  +List<Reading> findByLocation(String locationId, DateTime from, DateTime to)
+  +AggregationResult aggregate(String sensorId, String function, DateTime from, DateTime to)
+  +Reading findLatest(String sensorId)
+}
+
+interface SensorMetaRepository {
+  +void save(SensorMeta meta)
+  +SensorMeta findById(String sensorId)
+  +List<SensorMeta> findByLocation(String locationId)
+}
+
+interface SensorValuePublisher {
+  +void publish(SensorValue event)
+}
+
+' --- Ingest ---
+IngestReading --> ReadingValidator : uses
+IngestReading --> ReadingNormalizer : uses
+IngestReading --> TelemetryRepository : save
+IngestReading --> SensorMetaRepository : lookup
+IngestReading --> SensorValuePublisher : publish
+IngestReading "1" --> "1" Reading : creates
+ReadingValidator --> Reading : validates
+ReadingValidator --> SensorMeta : checks
+ReadingNormalizer --> Reading : mutates
+ReadingNormalizer --> SensorMeta : canonical unit
+SensorValue "1" --> "1" Reading : from
+SensorValuePublisher --> SensorValue : publishes
+
+' --- Query ---
+SearchTelemetry --> TelemetryRepository : read / aggregate
+SearchTelemetry --> SensorMetaRepository : resolve sensors
+SearchTelemetry --> AggregationResult : returns
+SearchTelemetry --> Reading : returns
+
+' --- Register sensor (PL) ---
+RegisterSensor --> SensorRegisteredEvent : handles
+RegisterSensor --> SensorMetaRepository : save
+RegisterSensor "1" --> "1" SensorMeta : creates
+SensorMeta "1" -- "0..*" Reading : measured by
+
+@enduml

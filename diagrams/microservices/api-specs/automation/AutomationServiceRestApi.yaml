@@ -1,0 +1,549 @@
+openapi: 3.0.3
+info:
+  title: Automation Service REST API
+  description: |
+    Синхронный API сервиса Automation (Core) для управления сценариями
+    и правилами автоматизации (CRUD, активация/деактивация).
+
+    Потребители: Web App через API Gateway.
+    При срабатывании правил сервис вызывает Device Control API (CS) и Home API (CS).
+  version: 1.0.0
+  contact:
+    name: SmartHome Platform
+
+servers:
+  - url: https://api.smarthome.local/automation
+    description: Production
+  - url: http://localhost:8084
+    description: Local
+
+tags:
+  - name: Scenarios
+    description: Сценарии автоматизации
+  - name: Rules
+    description: Правила сценариев
+  - name: Executions
+    description: История срабатываний
+
+paths:
+  /v1/homes/{homeId}/scenarios:
+    get:
+      tags: [Scenarios]
+      summary: Список сценариев дома
+      operationId: listScenarios
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Список сценариев
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Scenarios]
+      summary: Создать сценарий
+      operationId: createScenario
+      parameters:
+        - $ref: '#/components/parameters/HomeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScenarioRequest'
+      responses:
+        '201':
+          description: Сценарий создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scenario'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/scenarios/{scenarioId}:
+    get:
+      tags: [Scenarios]
+      summary: Получить сценарий
+      operationId: getScenario
+      parameters:
+        - $ref: '#/components/parameters/ScenarioId'
+      responses:
+        '200':
+          description: Сценарий
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scenario'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Scenarios]
+      summary: Обновить сценарий
+      operationId: updateScenario
+      parameters:
+        - $ref: '#/components/parameters/ScenarioId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScenarioRequest'
+      responses:
+        '200':
+          description: Сценарий обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scenario'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Scenarios]
+      summary: Удалить сценарий
+      operationId: deleteScenario
+      parameters:
+        - $ref: '#/components/parameters/ScenarioId'
+      responses:
+        '204':
+          description: Сценарий удалён
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/scenarios/{scenarioId}/activate:
+    post:
+      tags: [Scenarios]
+      summary: Активировать сценарий
+      operationId: activateScenario
+      parameters:
+        - $ref: '#/components/parameters/ScenarioId'
+      responses:
+        '200':
+          description: Сценарий активирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scenario'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/scenarios/{scenarioId}/deactivate:
+    post:
+      tags: [Scenarios]
+      summary: Деактивировать сценарий
+      operationId: deactivateScenario
+      parameters:
+        - $ref: '#/components/parameters/ScenarioId'
+      responses:
+        '200':
+          description: Сценарий деактивирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scenario'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/scenarios/{scenarioId}/rules:
+    get:
+      tags: [Rules]
+      summary: Список правил сценария
+      operationId: listRules
+      parameters:
+        - $ref: '#/components/parameters/ScenarioId'
+      responses:
+        '200':
+          description: Правила сценария
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioRuleList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Rules]
+      summary: Добавить правило
+      operationId: createRule
+      parameters:
+        - $ref: '#/components/parameters/ScenarioId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScenarioRuleRequest'
+            examples:
+              sensorThreshold:
+                summary: Триггер по температуре
+                value:
+                  triggerType: SENSOR_THRESHOLD
+                  triggerConfig:
+                    sensorId: "550e8400-e29b-41d4-a716-446655440000"
+                    operator: LT
+                    threshold: 18.0
+                    unit: CELSIUS
+                  actionType: DEVICE_COMMAND
+                  actionConfig:
+                    deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                    commandType: SET_TARGET_TEMPERATURE
+                    params:
+                      targetTemperature: 22.0
+                      unit: CELSIUS
+                  isActive: true
+              schedule:
+                summary: Триггер по расписанию
+                value:
+                  triggerType: SCHEDULE
+                  triggerConfig:
+                    cron: "0 7 * * *"
+                    timezone: Europe/Moscow
+                  actionType: DEVICE_COMMAND
+                  actionConfig:
+                    deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                    commandType: POWER_ON
+                    params: {}
+                  isActive: true
+      responses:
+        '201':
+          description: Правило создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/rules/{ruleId}:
+    get:
+      tags: [Rules]
+      summary: Получить правило
+      operationId: getRule
+      parameters:
+        - $ref: '#/components/parameters/RuleId'
+      responses:
+        '200':
+          description: Правило
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioRule'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Rules]
+      summary: Обновить правило
+      operationId: updateRule
+      parameters:
+        - $ref: '#/components/parameters/RuleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScenarioRuleRequest'
+      responses:
+        '200':
+          description: Правило обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Rules]
+      summary: Удалить правило
+      operationId: deleteRule
+      parameters:
+        - $ref: '#/components/parameters/RuleId'
+      responses:
+        '204':
+          description: Правило удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/scenarios/{scenarioId}/executions:
+    get:
+      tags: [Executions]
+      summary: История срабатываний сценария
+      operationId: listExecutions
+      parameters:
+        - $ref: '#/components/parameters/ScenarioId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: История срабатываний
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    HomeId:
+      name: homeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ScenarioId:
+      name: scenarioId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RuleId:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Недостаточно прав
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    TriggerType:
+      type: string
+      enum: [SENSOR_THRESHOLD, SCHEDULE, INTERVAL]
+    ActionType:
+      type: string
+      enum: [DEVICE_COMMAND, NOTIFY]
+
+    CreateScenarioRequest:
+      type: object
+      required: [ownerId, name]
+      properties:
+        ownerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+        isActive:
+          type: boolean
+          default: false
+
+    UpdateScenarioRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 1024
+
+    Scenario:
+      type: object
+      required: [id, homeId, ownerId, name, isActive, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        homeId:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ScenarioList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scenario'
+        total:
+          type: integer
+
+    CreateScenarioRuleRequest:
+      type: object
+      required: [triggerType, triggerConfig, actionType, actionConfig]
+      properties:
+        triggerType:
+          $ref: '#/components/schemas/TriggerType'
+        triggerConfig:
+          type: object
+          additionalProperties: true
+        actionType:
+          $ref: '#/components/schemas/ActionType'
+        actionConfig:
+          type: object
+          additionalProperties: true
+        isActive:
+          type: boolean
+          default: true
+
+    UpdateScenarioRuleRequest:
+      type: object
+      properties:
+        triggerType:
+          $ref: '#/components/schemas/TriggerType'
+        triggerConfig:
+          type: object
+          additionalProperties: true
+        actionType:
+          $ref: '#/components/schemas/ActionType'
+        actionConfig:
+          type: object
+          additionalProperties: true
+        isActive:
+          type: boolean
+
+    ScenarioRule:
+      type: object
+      required: [id, scenarioId, triggerType, triggerConfig, actionType, actionConfig, isActive, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        scenarioId:
+          type: string
+          format: uuid
+        triggerType:
+          $ref: '#/components/schemas/TriggerType'
+        triggerConfig:
+          type: object
+          additionalProperties: true
+        actionType:
+          $ref: '#/components/schemas/ActionType'
+        actionConfig:
+          type: object
+          additionalProperties: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ScenarioRuleList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScenarioRule'
+
+    Execution:
+      type: object
+      required: [id, scenarioId, ruleId, status, triggeredAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        scenarioId:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [SUCCESS, FAILED, SKIPPED]
+        triggerPayload:
+          type: object
+          additionalProperties: true
+        actionResult:
+          type: object
+          additionalProperties: true
+        errorMessage:
+          type: string
+          nullable: true
+        triggeredAt:
+          type: string
+          format: date-time
+
+    ExecutionList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Execution'
+        total:
+          type: integer
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

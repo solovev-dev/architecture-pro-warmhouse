@@ -1,0 +1,85 @@
+asyncapi: 2.6.0
+info:
+  title: Home Management Service Event API
+  version: 1.0.0
+  description: |
+    Асинхронный API сервиса Home Management (Supporting).
+
+    - Подписывается на DeviceRegistered (PL) из Device Management
+      и регистрирует / привязывает устройство к дому клиента.
+
+    Команды устройствам отправляются синхронно через Device Control REST API (CS).
+
+defaultContentType: application/json
+
+servers:
+  kafka:
+    url: kafka://kafka.smarthome.local:9092
+    protocol: kafka
+    description: Apache Kafka
+
+channels:
+  smart-home.device-management.device-registered:
+    description: Устройство зарегистрировано в экосистеме (PL)
+    subscribe:
+      operationId: consumeDeviceRegistered
+      summary: Регистрация устройства в доме клиента
+      description: |
+        DeviceRegisteredListener → DeviceService привязывает устройство
+        к homeId из события (если указан) или оставляет в ожидании привязки.
+      message:
+        $ref: '#/components/messages/DeviceRegistered'
+
+components:
+  messages:
+    DeviceRegistered:
+      name: DeviceRegistered
+      title: Устройство зарегистрировано
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DeviceRegisteredPayload'
+      examples:
+        - name: thermostatRegistered
+          payload:
+            deviceId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            typeId: "c56a4180-65aa-42ec-a945-5fd21dec0538"
+            homeId: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+            serialNumber: "SN-TRVZB-001234"
+            name: "Термостат гостиная"
+            protocol: ZIGBEE
+            status: REGISTERED
+            occurredAt: "2026-10-17T10:00:00Z"
+
+  schemas:
+    DeviceRegisteredPayload:
+      type: object
+      required: [deviceId, typeId, serialNumber, name, status, occurredAt]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        typeId:
+          type: string
+          format: uuid
+        homeId:
+          type: string
+          format: uuid
+          nullable: true
+        roomId:
+          type: string
+          format: uuid
+          nullable: true
+        serialNumber:
+          type: string
+        name:
+          type: string
+        protocol:
+          type: string
+          enum: [ZIGBEE, ZWAVE, WIFI, MQTT]
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, REGISTERED, ACTIVE, INACTIVE, DECOMMISSIONED]
+        occurredAt:
+          type: string
+          format: date-time

@@ -1,0 +1,68 @@
+@startuml SmartHome_Automation_Components
+title SmartHome — C4 Components\nAutomation Service (Core)
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+' =========================================================
+' EXTERNAL CONTAINERS / SYSTEMS
+' =========================================================
+Container(APIGateway, "API Gateway", "Nginx", "Управление сценариями из Web App")
+Container(Telemetry, "Telemetry Service", "Go", "Издаёт SensorValue (PL)")
+Container(DeviceControl, "Device Control", "Go", "Исполнение команд (CS)")
+Container(HomeMgmt, "Home Management Service", "Go", "Home API (CS):\nконтекст дома/комнат")
+ContainerDb(AutomationDb, "Automation DB", "PostgreSQL", "Правила и сценарии")
+Container(UserProfile, "Профиль пользователя", "Go", "User API")
+
+' =========================================================
+' CONTAINER BOUNDARY — Automation Service
+' =========================================================
+Container_Boundary(Automation, "Automation Service", "Python") {
+
+    Component(ScenarioApi, "ScenarioController", "HTTP / REST", "CRUD сценариев и правил\nавтоматизации")
+    Component(ScenarioService, "Scenario Service", "Python", "Управление правилами:\nусловия, действия, активация")
+    Component(RuleEngine, "RuleEngine", "Python", "Движок сценариев")
+    Component(Scheduler, "TriggerScheduler", "Python", "Триггеры по расписанию\n(cron / interval)")
+    Component(SensorValueListener, "SensorValueListener", "Kafka Consumer", "Подписка на SensorValue (PL)\nиз Telemetry")
+
+    Component(ActionExecutor, "ActionExecutor", "Python", "Выполняет действия сценария:\nкоманды устройствам")
+    Component(DeviceControlClient, "DeviceControlClient", "HTTP Client", "CS-клиент Device Control API")
+    Component(HomeClient, "Home Client", "HTTP Client", "CS-клиент Home API")
+    Component(UserClient, "User Client", "HTTP Client", "Клиент OHS User API")
+
+    ComponentDb(ScenarioRepo, "Scenario Repository", "SQL", "Сценарии, правила, история срабатываний")
+}
+
+' =========================================================
+' RELATIONS — Callers → API
+' =========================================================
+Rel(APIGateway, ScenarioApi, "Управление сценариями", "HTTP")
+
+' =========================================================
+' RELATIONS — Internal
+' =========================================================
+Rel(ScenarioApi, ScenarioService, "CRUD сценариев" )
+Rel(ScenarioService, UserClient, "Проверяет пользователя" )
+Rel(ScenarioService, HomeClient, "Контекст дома" )
+Rel(ScenarioService, ScenarioRepo, "R/W сценарии" )
+
+Rel(SensorValueListener, RuleEngine, "Событие телеметрии" )
+Rel(Scheduler, RuleEngine, "Тик расписания" )
+Rel(RuleEngine, ScenarioRepo, "Читает активные правила" )
+Rel(RuleEngine, ActionExecutor, "Сработало правило" )
+Rel(ActionExecutor, DeviceControlClient, "Команда устройству" )
+Rel(ActionExecutor, HomeClient, "Контекст привязки" )
+
+' =========================================================
+' RELATIONS — External
+' =========================================================
+Rel(SensorValueListener, Telemetry, "SensorValue (PL)", "Kafka")
+Rel(DeviceControlClient, DeviceControl, "Device Control API (CS)", "HTTP")
+Rel(HomeClient, HomeMgmt, "Home API (CS)", "HTTP")
+Rel(UserClient, UserProfile, "User API", "HTTP")
+Rel(ScenarioRepo, AutomationDb, "R/W", "SQL")
+
+Lay_D(ScenarioRepo, HomeClient)
+
+@enduml

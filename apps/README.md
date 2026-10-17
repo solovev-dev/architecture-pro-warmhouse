@@ -26,7 +26,11 @@ Alternatively, you can run Docker Compose directly:
 docker-compose up -d
 ```
 
-The API will be available at http://localhost:8080
+Services:
+
+- Smart Home API: http://localhost:8080
+- Temperature API: http://localhost:8081
+- PostgreSQL: localhost:5432
 
 ### Option 2: Manual setup
 
@@ -35,7 +39,7 @@ If you prefer to run the application without Docker:
 1. Start the PostgreSQL database:
 
 ```bash
-docker-compose up -d postgres
+docker compose up -d postgres
 ```
 
 2. Build and run the application:

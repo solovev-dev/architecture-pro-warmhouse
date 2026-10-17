@@ -1,0 +1,617 @@
+openapi: 3.0.3
+info:
+  title: Device Management Service REST API
+  description: |
+    Синхронный API сервиса Device Management (Supporting) — реестр устройств
+    и модулей экосистемы, onboarding и настройка протоколов.
+
+    Потребители: Web App через API Gateway.
+    После регистрации публикуются события DeviceRegistered / SensorRegistered (PL).
+  version: 1.0.0
+  contact:
+    name: SmartHome Platform
+
+servers:
+  - url: https://api.smarthome.local/device-management
+    description: Production
+  - url: http://localhost:8085
+    description: Local
+
+tags:
+  - name: Devices
+    description: Реестр устройств
+  - name: Modules
+    description: Модули устройства (датчики / реле)
+  - name: DeviceTypes
+    description: Типы устройств
+  - name: Onboarding
+    description: Подключение и настройка
+
+paths:
+  /v1/device-types:
+    get:
+      tags: [DeviceTypes]
+      summary: Каталог типов устройств
+      operationId: listDeviceTypes
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            example: HEATING
+      responses:
+        '200':
+          description: Список типов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceTypeList'
+    post:
+      tags: [DeviceTypes]
+      summary: Создать тип устройства
+      operationId: createDeviceType
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeviceTypeRequest'
+      responses:
+        '201':
+          description: Тип создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceType'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/device-types/{typeId}:
+    get:
+      tags: [DeviceTypes]
+      summary: Получить тип устройства
+      operationId: getDeviceType
+      parameters:
+        - $ref: '#/components/parameters/TypeId'
+      responses:
+        '200':
+          description: Тип устройства
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceType'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/devices:
+    get:
+      tags: [Devices]
+      summary: Список устройств в реестре
+      operationId: listDevices
+      parameters:
+        - name: homeId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/DeviceStatus'
+        - name: typeId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Список устройств
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceList'
+    post:
+      tags: [Devices]
+      summary: Зарегистрировать устройство
+      operationId: registerDevice
+      description: |
+        Создаёт запись в реестре. После успеха публикуется DeviceRegistered (PL).
+        Для модулей kind=SENSOR дополнительно публикуется SensorRegistered (PL).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+      responses:
+        '201':
+          description: Устройство зарегистрировано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Устройство с таким serialNumber уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/devices/{deviceId}:
+    get:
+      tags: [Devices]
+      summary: Получить устройство
+      operationId: getDevice
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Устройство
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Devices]
+      summary: Обновить параметры устройства
+      operationId: updateDevice
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDeviceRequest'
+      responses:
+        '200':
+          description: Устройство обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Devices]
+      summary: Удалить устройство из реестра
+      operationId: deleteDevice
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '204':
+          description: Устройство удалено
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/devices/{deviceId}/modules:
+    get:
+      tags: [Modules]
+      summary: Модули устройства
+      operationId: listModules
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Список модулей
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Modules]
+      summary: Добавить модуль
+      operationId: addModule
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateModuleRequest'
+      responses:
+        '201':
+          description: Модуль добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/modules/{moduleId}:
+    get:
+      tags: [Modules]
+      summary: Получить модуль
+      operationId: getModule
+      parameters:
+        - $ref: '#/components/parameters/ModuleId'
+      responses:
+        '200':
+          description: Модуль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Modules]
+      summary: Обновить модуль
+      operationId: updateModule
+      parameters:
+        - $ref: '#/components/parameters/ModuleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModuleRequest'
+      responses:
+        '200':
+          description: Модуль обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Modules]
+      summary: Удалить модуль
+      operationId: deleteModule
+      parameters:
+        - $ref: '#/components/parameters/ModuleId'
+      responses:
+        '204':
+          description: Модуль удалён
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/devices/{deviceId}/onboarding:
+    post:
+      tags: [Onboarding]
+      summary: Запустить onboarding устройства
+      operationId: startOnboarding
+      description: |
+        Настройка протокола, параметров подключения и регистрация датчиков.
+        По завершении публикуется SensorRegistered для модулей kind=SENSOR.
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingRequest'
+      responses:
+        '200':
+          description: Onboarding выполнен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ModuleId:
+      name: moduleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TypeId:
+      name: typeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    DeviceStatus:
+      type: string
+      enum: [PENDING, REGISTERED, ACTIVE, INACTIVE, DECOMMISSIONED]
+
+    ModuleKind:
+      type: string
+      enum: [SENSOR, RELAY]
+
+    ModuleStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+
+    CreateDeviceTypeRequest:
+      type: object
+      required: [name, category]
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+          example: HEATING
+        description:
+          type: string
+        manufacturer:
+          type: string
+          example: Sonoff
+
+    DeviceType:
+      type: object
+      required: [id, name, category]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+          nullable: true
+        manufacturer:
+          type: string
+          nullable: true
+
+    DeviceTypeList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceType'
+
+    RegisterDeviceRequest:
+      type: object
+      required: [typeId, serialNumber, name]
+      properties:
+        typeId:
+          type: string
+          format: uuid
+        homeId:
+          type: string
+          format: uuid
+          description: Дом владельца (опционально на этапе доставки)
+          nullable: true
+        roomId:
+          type: string
+          format: uuid
+          nullable: true
+        serialNumber:
+          type: string
+        name:
+          type: string
+        protocol:
+          type: string
+          enum: [ZIGBEE, ZWAVE, WIFI, MQTT]
+          example: ZIGBEE
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateModuleRequest'
+          description: Модули, создаваемые вместе с устройством
+
+    UpdateDeviceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        homeId:
+          type: string
+          format: uuid
+          nullable: true
+        roomId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/DeviceStatus'
+        protocol:
+          type: string
+          enum: [ZIGBEE, ZWAVE, WIFI, MQTT]
+
+    Device:
+      type: object
+      required: [id, typeId, serialNumber, name, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        typeId:
+          type: string
+          format: uuid
+        homeId:
+          type: string
+          format: uuid
+          nullable: true
+        roomId:
+          type: string
+          format: uuid
+          nullable: true
+        serialNumber:
+          type: string
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/DeviceStatus'
+        protocol:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    DeviceList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Device'
+        total:
+          type: integer
+
+    CreateModuleRequest:
+      type: object
+      required: [kind, name, metric]
+      properties:
+        kind:
+          $ref: '#/components/schemas/ModuleKind'
+        name:
+          type: string
+        metric:
+          type: string
+          example: TEMPERATURE
+        unit:
+          type: string
+          example: CELSIUS
+
+    UpdateModuleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        metric:
+          type: string
+        unit:
+          type: string
+        status:
+          $ref: '#/components/schemas/ModuleStatus'
+
+    Module:
+      type: object
+      required: [id, deviceId, kind, name, metric, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/ModuleKind'
+        name:
+          type: string
+        metric:
+          type: string
+        unit:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ModuleStatus'
+        createdAt:
+          type: string
+          format: date-time
+
+    ModuleList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Module'
+
+    OnboardingRequest:
+      type: object
+      required: [protocol]
+      properties:
+        protocol:
+          type: string
+          enum: [ZIGBEE, ZWAVE, WIFI, MQTT]
+        networkKey:
+          type: string
+          description: Ключ/параметры сети (не логировать в plain text)
+        configuration:
+          type: object
+          additionalProperties: true
+          description: Протокол-специфичные параметры
+        locationId:
+          type: string
+          format: uuid
+          description: Комната для привязки датчиков при регистрации
+
+    OnboardingResult:
+      type: object
+      required: [deviceId, status, registeredSensors]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/DeviceStatus'
+        registeredSensors:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: ID модулей-датчиков, для которых опубликован SensorRegistered
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

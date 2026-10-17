@@ -1,0 +1,55 @@
+@startuml SmartHome_DeviceManagement_Components
+title SmartHome — C4 Components\nDevice Management Service (Supporting)
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+' =========================================================
+' EXTERNAL CONTAINERS / SYSTEMS
+' =========================================================
+Container(APIGateway, "API Gateway", "Nginx", "Реестр устройств из Web App")
+Container(Commerce, "e-Commerce Service", "Java / Kotlin", "Издаёт DeviceDelivered (PL/ACL)")
+Container(Telemetry, "Telemetry Service", "Go", "Подписчик SensorRegistered (PL)")
+Container(HomeMgmt, "Home Management Service", "Go", "Подписчик DeviceRegistered (PL)")
+ContainerDb(DeviceMgmtDb, "Device DB", "PostgreSQL", "Реестр устройств, конфигурации")
+
+' =========================================================
+' CONTAINER BOUNDARY — Device Management
+' =========================================================
+Container_Boundary(DeviceMgmt, "Device Management Service", "Go") {
+    Component(RegistryApi, "DeviceRegistryController", "HTTP / REST", "Регистрация, редактирование,\nудаление устройств в реестре")
+    Component(RegistryService, "RegistryService", "Go", "Жизненный цикл устройства\nв экосистеме (реестр модулей)")
+    Component(OnboardingService, "OnboardingService", "Go", "Подключение и настройка:\nпараметры, протоколы и тд")
+    Component(DeviceDeliveredListener, "DeviceDeliveredListener", "Kafka Consumer", "Обрабатывает DeviceDelivered\nиз Commerce (PL/ACL)")
+    Component(DomainEventPublisher, "DomainEventPublisher", "Kafka Producer", "Публикует SensorRegistered\nи DeviceRegistered (PL)")
+    ComponentDb(DeviceRepo, "DeviceRepository", "SQL", "Реестр устройств\nи конфигурации")
+}
+
+' =========================================================
+' RELATIONS — Callers → API
+' =========================================================
+Rel(APIGateway, RegistryApi, "Реестр устройств", "HTTP")
+
+' =========================================================
+' RELATIONS — Internal
+' =========================================================
+Rel(RegistryApi, RegistryService, "Просмотр/редактирование реестра устройств")
+Rel(RegistryApi, OnboardingService, "Настройка/подключение устройства")
+
+Rel(DeviceDeliveredListener, RegistryService, "Создаёт запись о новом устройстве")
+Rel(RegistryService, DomainEventPublisher, "DeviceRegistered / SensorRegistered")
+Rel(OnboardingService, DomainEventPublisher, "SensorRegistered")
+
+Rel(RegistryService, DeviceRepo, "R/W реестр")
+Rel(OnboardingService, DeviceRepo, "R/W конфигурации")
+
+' =========================================================
+' RELATIONS — External
+' =========================================================
+Rel(DeviceDeliveredListener, Commerce, "DeviceDelivered (PL/ACL)", "Kafka")
+Rel(DomainEventPublisher, Telemetry, "SensorRegistered (PL)", "Kafka")
+Rel(DomainEventPublisher, HomeMgmt, "DeviceRegistered (PL)", "Kafka")
+Rel(DeviceRepo, DeviceMgmtDb, "R/W", "SQL")
+
+@enduml

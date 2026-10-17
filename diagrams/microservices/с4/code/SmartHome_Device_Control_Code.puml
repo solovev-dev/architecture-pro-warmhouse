@@ -1,0 +1,126 @@
+@startuml SmartHome_Device_Control_Code
+title SmartHome — UML Class Diagram\nDevice Control (критическая BL)
+
+skinparam classAttributeIconSize 0
+
+' =========================================================
+' Сценарии (из C4 Components + Context Map):
+' 1) ExecuteCommand: validate → authorize (OHS User) → journal → publish Command Queue → update state
+' 2) GetDeviceState: текущее состояние устройства
+' 3) GetCommandHistory: журнал команд по устройству / id
+' 4) ApplyCommandResult: результат исполнения (APPLIED / FAILED) → обновить Command + DeviceState
+' =========================================================
+
+class Command {
+  +String id
+  +String deviceId
+  +String userId
+  +String type
+  +Map<String, Object> params
+  +CommandStatus status
+  +String failureReason
+  +DateTime createdAt
+  +DateTime updatedAt
+  +void markPublished()
+  +void markApplied()
+  +void markFailed(String reason)
+}
+
+enum CommandStatus {
+  PENDING
+  PUBLISHED
+  APPLIED
+  FAILED
+}
+
+class DeviceState {
+  +String deviceId
+  +Map<String, Object> attributes
+  +String lastCommandId
+  +DateTime updatedAt
+  +void apply(Command command)
+  +Object getAttribute(String key)
+  +void setAttribute(String key, Object value)
+}
+
+class CommandValidator {
+  +void validate(Command command)
+  +boolean supportsType(String type)
+  +boolean paramsMatchSchema(Command command)
+}
+
+class CommandAuthPolicy {
+  +void authorize(String userId, String deviceId)
+}
+
+class DeviceStateService {
+  +DeviceState get(String deviceId)
+  +DeviceState applyCommand(Command command)
+  +DeviceState applyResult(Command command)
+}
+
+class ExecuteCommand {
+  +Command execute(String userId, String deviceId, String type, Map params)
+}
+
+class GetDeviceState {
+  +DeviceState execute(String deviceId)
+}
+
+class GetCommandHistory {
+  +Command findById(String commandId)
+  +List<Command> byDevice(String deviceId)
+}
+
+class ApplyCommandResult {
+  +Command execute(String commandId, boolean success, String reason)
+}
+
+interface UserClient {
+  +boolean canControlDevice(String userId, String deviceId)
+}
+
+interface CommandRepository {
+  +void append(Command command)
+  +void update(Command command)
+  +Command findById(String id)
+  +List<Command> findByDevice(String deviceId)
+}
+
+interface StateRepository {
+  +DeviceState findByDevice(String deviceId)
+  +void save(DeviceState state)
+}
+
+interface CommandPublisher {
+  +void publish(Command command)
+}
+
+Command "1" --> "1" CommandStatus : has
+
+' --- Execute command (Automation / HomeMgmt → CS Device API) ---
+ExecuteCommand --> CommandValidator : uses
+ExecuteCommand --> CommandAuthPolicy : uses
+ExecuteCommand --> CommandRepository : append
+ExecuteCommand --> CommandPublisher : publish
+ExecuteCommand --> DeviceStateService : optimistic / pending state
+ExecuteCommand "1" --> "1" Command : creates
+CommandAuthPolicy --> UserClient : check
+CommandValidator --> Command : validates
+CommandPublisher --> Command : publishes
+
+' --- State ---
+DeviceStateService --> StateRepository : R/W
+DeviceStateService "1" --> "0..1" DeviceState : manages
+DeviceState "1" -- "0..*" Command : affected by
+GetDeviceState --> DeviceStateService : get
+
+' --- History ---
+GetCommandHistory --> CommandRepository : read
+
+' --- Apply result (после исполнения на Home Hub) ---
+ApplyCommandResult --> CommandRepository : update status
+ApplyCommandResult --> DeviceStateService : applyResult
+ApplyCommandResult --> Command : updates
+
+@enduml
